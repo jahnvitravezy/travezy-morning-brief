@@ -1,0 +1,5 @@
+# Allowlist of models any agent or judge may use. family is used to test judge self-preference.
+openai/gpt-4o:       { family: openai }
+openai/gpt-4o-mini:  { family: openai }
+openai/gpt-4.1-mini: { family: openai }
+# Anthropic and Google entries are added on Wednesday, with exact IDs from their docs.

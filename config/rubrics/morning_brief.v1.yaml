@@ -1,0 +1,20 @@
+id: rubric.morning_brief.v1
+use_case: morning_brief
+judge_model: openai/gpt-4o-mini
+temperature: 0
+scale: "0-100"
+badge: { green: 85, amber: 60 }
+max_fix_attempts: 1
+rule_checks:                    # run in code, before any model call
+  notification_title_max_chars: 40
+  notification_body_max_chars: 90
+  max_surprises: 3
+  surprise_needs_source_or_place_id: true
+  all_fields_present: true
+criteria:
+  # Format is mostly enforced by rule checks, so its model weight moves to accuracy.
+  - { id: accuracy,    weight: 0.35, asks: "Are places, times, prices and hours correct against the inputs?" }
+  - { id: relevance,   weight: 0.25, asks: "Does it fit this trip's preferences and this day?" }
+  - { id: feasibility, weight: 0.20, asks: "Can the user do it in the time and distance shown?" }
+  - { id: format,      weight: 0.10, asks: "Does it meet the output contract?" }
+  - { id: tone,        weight: 0.10, asks: "Is it decisive, honest and short?" }

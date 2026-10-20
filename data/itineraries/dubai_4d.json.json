@@ -1,0 +1,180 @@
+{
+  "plan": [
+    {
+      "dt": "2026-11-20",
+      "act_ttl": "Arrival & Downtown",
+      "acts": [
+        {
+          "tm": "09:00 AM",
+          "type": "move",
+          "move_type": "flight",
+          "move_no": "EK501",
+          "cost": "$280 per person",
+          "desc": "Flight Mumbai to Dubai. Booked.",
+          "duration": "3 hours"
+        },
+        {
+          "tm": "01:00 PM",
+          "type": "relax_at_hotel_or_explore",
+          "name": "Rove Downtown",
+          "addr": "Al Mustaqbal St, Downtown Dubai",
+          "desc": "Check in. Booked for 3 nights. ~$110 per night."
+        },
+        {
+          "tm": "05:00 PM",
+          "type": "do",
+          "place": "Burj Khalifa At the Top",
+          "addr": "Downtown Dubai",
+          "cost": "AED 169 per person",
+          "desc": "Observation deck at sunset. Booked, timed entry at 5:00 PM.",
+          "tips": "",
+          "hours": "5:00 PM - 6:30 PM"
+        },
+        {
+          "tm": "07:00 PM",
+          "type": "do",
+          "place": "Dubai Fountain",
+          "addr": "Burj Lake, Downtown Dubai",
+          "cost": "Free",
+          "desc": "Evening fountain show.",
+          "tips": "",
+          "hours": "7:00 PM - 7:30 PM"
+        },
+        {
+          "tm": "08:00 PM",
+          "type": "eat",
+          "eat_name": "Ravi Restaurant",
+          "eat_addr": "Al Satwa, Dubai",
+          "cost": "AED 40 per person",
+          "desc": "Dinner at a popular local spot."
+        }
+      ]
+    },
+    {
+      "dt": "2026-11-21",
+      "act_ttl": "Old Dubai",
+      "acts": [
+        {
+          "tm": "09:30 AM",
+          "type": "do",
+          "place": "Al Fahidi Historical District",
+          "addr": "Bur Dubai",
+          "cost": "Free",
+          "desc": "Walking tour of the old wind-tower houses.",
+          "tips": "",
+          "hours": "9:30 AM - 11:30 AM"
+        },
+        {
+          "tm": "11:30 AM",
+          "type": "move",
+          "move_type": "abra",
+          "move_no": "Dubai Creek abra",
+          "cost": "AED 1 per person",
+          "desc": "Traditional boat across the creek. Cash only.",
+          "duration": "10 minutes"
+        },
+        {
+          "tm": "12:00 PM",
+          "type": "do",
+          "place": "Gold and Spice Souks",
+          "addr": "Deira, Dubai",
+          "cost": "Free",
+          "desc": "Market walk.",
+          "tips": "",
+          "hours": "12:00 PM - 2:00 PM"
+        },
+        {
+          "tm": "03:00 PM",
+          "type": "do",
+          "place": "Museum of the Future",
+          "addr": "Sheikh Zayed Road, Dubai",
+          "cost": "AED 149 per person",
+          "desc": "Booked, timed entry at 3:00 PM.",
+          "tips": "",
+          "hours": "3:00 PM - 5:00 PM"
+        },
+        {
+          "tm": "08:00 PM",
+          "type": "eat",
+          "eat_name": "Al Ustad Special Kebab",
+          "eat_addr": "Al Musalla Rd, Bur Dubai",
+          "cost": "AED 60 per person",
+          "desc": "Kebab dinner."
+        }
+      ]
+    },
+    {
+      "dt": "2026-11-22",
+      "act_ttl": "Desert Safari",
+      "acts": [
+        {
+          "tm": "10:00 AM",
+          "type": "do",
+          "place": "Dubai Mall & Aquarium",
+          "addr": "Downtown Dubai",
+          "cost": "AED 129 per person",
+          "desc": "Shopping and the aquarium tunnel.",
+          "tips": "",
+          "hours": "10:00 AM - 1:00 PM"
+        },
+        {
+          "tm": "03:00 PM",
+          "type": "do",
+          "place": "Evening Desert Safari",
+          "addr": "Lahbab Desert, Dubai",
+          "cost": "AED 240 per person",
+          "desc": "Dune bashing, camel ride and dinner at camp. Booked; hotel pickup at 3:00 PM.",
+          "tips": "",
+          "hours": "3:00 PM - 9:00 PM"
+        }
+      ]
+    },
+    {
+      "dt": "2026-11-23",
+      "act_ttl": "Marina & Departure",
+      "acts": [
+        {
+          "tm": "09:00 AM",
+          "type": "do",
+          "place": "Dubai Marina Walk",
+          "addr": "Dubai Marina",
+          "cost": "Free",
+          "desc": "Morning walk along the marina.",
+          "tips": "",
+          "hours": "9:00 AM - 10:30 AM"
+        },
+        {
+          "tm": "11:00 AM",
+          "type": "do",
+          "place": "JBR Beach",
+          "addr": "Jumeirah Beach Residence, Dubai",
+          "cost": "Free",
+          "desc": "Beach time. Outdoor, midday sun.",
+          "tips": "",
+          "hours": "11:00 AM - 1:00 PM"
+        },
+        {
+          "tm": "03:00 PM",
+          "type": "move",
+          "move_type": "car",
+          "move_no": "Taxi",
+          "cost": "AED 90",
+          "desc": "Taxi to Dubai International Airport.",
+          "duration": "40 minutes"
+        },
+        {
+          "tm": "06:00 PM",
+          "type": "move",
+          "move_type": "flight",
+          "move_no": "EK508",
+          "cost": "Included",
+          "desc": "Flight Dubai to Mumbai. Booked.",
+          "duration": "3 hours"
+        }
+      ]
+    }
+  ],
+  "others": [],
+  "ignored_user_preference": [],
+  "place_identity": "City & Desert"
+}

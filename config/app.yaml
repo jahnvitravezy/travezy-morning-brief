@@ -1,0 +1,6 @@
+itinerary_loader: file          # file now; api later (one-line change)
+itinerary_dir: data/itineraries
+budget_inr: 5000                # agreed cap for model and API usage
+inr_per_usd: 88                 # check today's rate
+default_send_local: "07:30"
+send_lead_min: 60               # send at 07:30, or 60 min before the first activity if earlier

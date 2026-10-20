@@ -1,0 +1,36 @@
+- id: mb.summariser.v1
+  use_case: morning_brief
+  job: Turn the day's itinerary into the headline, timeline, heads-ups, spend and tip
+  inputs: [ctx.trip_day, src.weather, src.places]
+  output: out.summary
+  model: openai/gpt-4o
+  prompt_version: summariser-v1
+  timeout_s: 30
+
+- id: mb.surprise_finder.v1
+  use_case: morning_brief
+  job: Find two or three verifiable things to do in a free window near the user
+  inputs: [ctx.trip_day, src.places, src.routes, src.web_search]
+  output: out.surprises
+  model: openai/gpt-4o
+  prompt_version: surprise-finder-v1
+  timeout_s: 30
+
+- id: mb.composer.v1
+  use_case: morning_brief
+  job: Merge summary and surprises into the output contract, remove duplicates and clashes, write actions
+  inputs: [ctx.trip_day, out.summary, out.surprises]
+  output: out.draft
+  model: openai/gpt-4o
+  prompt_version: composer-v1
+  timeout_s: 30
+
+- id: mb.judge.v1
+  use_case: morning_brief
+  job: Score the draft against the rubric and return pass, fix or fallback
+  inputs: [ctx.trip_day, out.draft]
+  output: out.verdict
+  model: openai/gpt-4o-mini
+  prompt_version: judge-v1
+  rubric: rubric.morning_brief.v1
+  timeout_s: 30

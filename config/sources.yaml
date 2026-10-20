@@ -1,0 +1,11 @@
+- { id: ctx.trip_day,        kind: context, description: "One package of facts per trip day, built once per run" }
+- { id: src.itinerary.day,   kind: input,   provider: file, description: "The day's slice of the itinerary" }
+- { id: src.trip.preferences, kind: input,  provider: file, description: "Diet, pace, children, budget: answers to the trip's planning questions" }
+- { id: src.weather,         kind: input,   provider: open_meteo,    description: "Hourly forecast per planned location" }
+- { id: src.places,          kind: input,   provider: google_places, description: "Place ID, location, opening hours" }
+- { id: src.routes,          kind: input,   provider: google_routes, description: "Travel times between stops" }
+- { id: src.web_search,      kind: input,   provider: tavily,        description: "Nearby things to do, with source links" }
+- { id: out.summary,   kind: output, description: "Headline, timeline, heads-ups, spend, tip" }
+- { id: out.surprises, kind: output, description: "Surprise candidates, each with a source" }
+- { id: out.draft,     kind: output, description: "The Morning Brief in the output contract" }
+- { id: out.verdict,   kind: output, description: "Scores, verdict, reasons and badge" }
