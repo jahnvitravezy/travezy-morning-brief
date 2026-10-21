@@ -1,0 +1,41 @@
+# Diet, pace and children are answers to each trip's planning questions (they belong to the trip).
+up.01:
+  who: Couple in their early 30s, no children
+  party: { adults: 2, children_ages: [] }
+  diet: { summary: "Vegetarian, no egg", restrictions: [vegetarian, no_egg] }
+  pace: { summary: "Relaxed: one main activity in the morning, one in the evening", start_not_before: "09:00" }
+  budget: mid
+  home_currency: INR
+  interests: [cafes, photography, sunset spots, local markets]
+up.02:
+  who: Family of four, two adults and two children
+  party: { adults: 2, children_ages: [6, 10] }
+  diet: { summary: "Jain vegetarian: no onion, garlic or root vegetables", restrictions: [jain, vegetarian, no_onion, no_garlic, no_root_vegetables] }
+  pace: { summary: "Moderate, rest break after lunch, back at the hotel by 20:00", back_by: "20:00", rest_after_lunch: true }
+  budget: mid_high
+  home_currency: INR
+  interests: [theme parks, aquariums, beaches, easy short walks]
+up.03:
+  who: Solo traveller, 27
+  party: { adults: 1, children_ages: [] }
+  diet: { summary: "Eats everything", restrictions: [] }
+  pace: { summary: "Fast: happy to start early and stay out late", start_not_before: "07:00", back_by: "23:30" }
+  budget: low
+  home_currency: INR
+  interests: [adventure activities, street food, nightlife, hidden spots]
+up.04:
+  who: Retired couple in their 60s
+  party: { adults: 2, children_ages: [] }
+  diet: { summary: "Vegetarian", restrictions: [vegetarian] }
+  pace: { summary: "Slow: no more than 2 km walking a day, avoid steep stairs, early dinner around 19:00", max_walk_km: 2, avoid_steep: true, dinner_around: "19:00" }
+  budget: mid
+  home_currency: INR
+  interests: [temples, heritage, culture, gardens, quiet restaurants]
+up.05:
+  who: Four friends in their late 20s, living in Singapore
+  party: { adults: 4, children_ages: [] }
+  diet: { summary: "Mixed: two vegetarian, two eat everything", restrictions: [vegetarian], applies_to: some }
+  pace: { summary: "Moderate: late mornings, evenings out", start_not_before: "10:00", back_by: "23:30" }
+  budget: high
+  home_currency: SGD
+  interests: [shopping, beach clubs, spas, rooftop dining]

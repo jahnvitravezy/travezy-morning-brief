@@ -1,0 +1,184 @@
+"""Contracts: the typed shape of every piece of data that crosses a boundary.
+
+Inputs (itinerary, trip preferences), the context package, and the output contract the
+app renders. Format limits (title length, max surprises) are NOT enforced here: a draft
+that breaks them must still be representable, so the judge can send it back for a fix.
+"""
+from __future__ import annotations
+
+import datetime as dt
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class Contract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+# ---------- Itinerary ----------
+class Money(Contract):
+    amount: float = Field(ge=0)
+    currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")  # None when free or included
+    per: Literal["person", "total", "night", "day"] = "total"
+
+
+class Activity(Contract):
+    id: str
+    kind: Literal["do", "eat", "move", "stay"]
+    start: dt.time
+    end: dt.time | None = None
+    name: str
+    address: str | None = None
+    cost_text: str | None = None
+    cost: Money | None = None
+    booked: bool = False
+    timed_at: dt.time | None = None    # timed entry or pickup time, when stated
+    move_mode: str | None = None
+    note: str = ""
+
+
+class TripDay(Contract):
+    trip_id: str
+    index: int = Field(ge=0)
+    date: dt.date
+    title: str
+    activities: list[Activity]
+    is_arrival: bool
+    is_departure: bool
+    is_free: bool
+    wake_location: str                 # where the traveller wakes up: the previous night's stay
+
+
+# ---------- Preferences: answers to the trip's planning questions ----------
+class Party(Contract):
+    adults: int = Field(ge=1)
+    children_ages: list[int] = []
+
+
+class Diet(Contract):
+    summary: str
+    restrictions: list[str] = []
+    applies_to: Literal["all", "some"] = "all"
+
+
+class Pace(Contract):
+    summary: str
+    start_not_before: dt.time | None = None
+    back_by: dt.time | None = None
+    dinner_around: dt.time | None = None
+    max_walk_km: float | None = None
+    avoid_steep: bool = False
+    rest_after_lunch: bool = False
+
+
+class Preferences(Contract):
+    id: str
+    who: str
+    party: Party
+    diet: Diet
+    pace: Pace
+    budget: Literal["low", "mid", "mid_high", "high"]
+    home_currency: str = Field(pattern=r"^[A-Z]{3}$")
+    interests: list[str] = []
+
+    @property
+    def party_size(self) -> int:
+        return self.party.adults + len(self.party.children_ages)
+
+
+class Trip(Contract):
+    trip_id: str
+    itinerary_id: str
+    place_identity: str | None = None
+    origin: str | None = None
+    ignored_user_preference: list[str] = []
+    preferences: Preferences
+    days: list[TripDay]
+
+
+# ---------- Context package ----------
+Freshness = Literal["live", "cached", "fixture", "unavailable", "not_fetched"]
+
+
+class Window(Contract):
+    start: dt.time
+    end: dt.time
+
+
+class Context(Contract):
+    ctx_id: str
+    trip_id: str
+    date: dt.date
+    day: TripDay
+    preferences: Preferences
+    free_windows: list[Window]
+    other_days: list[str]              # items planned on other days, so nothing repeats
+    timezone: str | None = None        # filled by the source layer
+    send_at_local: dt.time | None = None
+    freshness: dict[str, Freshness]
+
+
+# ---------- Output contract: what the app renders ----------
+class Notification(Contract):
+    title: str = ""
+    body: str = ""
+
+
+class TimelineItem(Contract):
+    time: str
+    name: str
+    booked: bool = False
+    travel_to_next_min: int | None = None
+
+
+class Weather(Contract):
+    summary: str = ""
+    clash: str | None = None
+    suggested_swap: str | None = None
+
+
+class Spend(Contract):
+    local: str = ""
+    home: str = ""
+
+
+class SurpriseItem(Contract):
+    name: str
+    why_you: str
+    fits_slot: str
+    distance_min: int | None = None
+    source_url: str | None = None
+    place_id: str | None = None
+
+
+class Confidence(Contract):
+    score: int | None = Field(default=None, ge=0, le=100)
+    badge: Literal["green", "amber", "red"] | None = None
+    flags: list[str] = []
+
+
+class Meta(Contract):
+    models: dict[str, str] = {}
+    latency_ms: int = 0
+    tokens: dict[str, int] = {}
+    judge_verdict: Literal["pass", "fix", "fallback"] | None = None
+
+
+class MorningBrief(Contract):
+    """Defaults mean every field is always present in the JSON, even when empty."""
+    brief_id: str
+    trip_id: str
+    date: dt.date
+    send_at_local: str = ""
+    timezone: str = ""
+    notification: Notification = Notification()
+    timeline: list[TimelineItem] = []
+    weather: Weather = Weather()
+    heads_ups: list[str] = []
+    spend_estimate: Spend = Spend()
+    surprises: list[SurpriseItem] = []
+    local_tip: str = ""
+    confidence: Confidence = Confidence()
+    actions: list[Literal["add_to_day", "swap", "ask"]] = []
+    meta: Meta = Meta()
