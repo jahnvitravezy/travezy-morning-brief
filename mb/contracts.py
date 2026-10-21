@@ -92,6 +92,7 @@ class Trip(Contract):
     itinerary_id: str
     place_identity: str | None = None
     origin: str | None = None
+    destination: str | None = None
     ignored_user_preference: list[str] = []
     preferences: Preferences
     days: list[TripDay]
@@ -104,6 +105,19 @@ Freshness = Literal["live", "cached", "fixture", "unavailable", "not_fetched"]
 class Window(Contract):
     start: dt.time
     end: dt.time
+    
+class HourWeather(Contract):
+    hour: dt.time
+    temp_c: float
+    rain_prob: int = Field(ge=0, le=100)
+    rain_mm: float = Field(ge=0)
+
+
+class WeatherDay(Contract):
+    location: str
+    source: Freshness
+    scenario: str | None = None        # set when this is a stored test scenario, not a forecast
+    hours: list[HourWeather] = []
 
 
 class Context(Contract):
@@ -116,6 +130,7 @@ class Context(Contract):
     other_days: list[str]              # items planned on other days, so nothing repeats
     timezone: str | None = None        # filled by the source layer
     send_at_local: dt.time | None = None
+    weather: WeatherDay | None = None
     freshness: dict[str, Freshness]
 
 

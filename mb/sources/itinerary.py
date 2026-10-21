@@ -93,11 +93,11 @@ def _activity(trip_id: str, d: int, i: int, raw: dict) -> Activity:
 
 def parse_trip(trip_id: str, itinerary_id: str, raw: dict, prefs: Preferences) -> Trip:
     plan = raw["plan"]
-    origin = None
+    origin = destination = None
     for a in (plan[0]["acts"] if plan else []):
         m = _FLIGHT.search(a.get("desc", "")) if a.get("type") == "move" else None
         if m:
-            origin = m["frm"].strip()
+            origin, destination = m["frm"].strip(), m["to"].strip()
             break
     days, sleeps_at = [], origin or "unknown"
     for d, day in enumerate(plan):
@@ -110,8 +110,8 @@ def parse_trip(trip_id: str, itinerary_id: str, raw: dict, prefs: Preferences) -
             if a.kind == "stay":
                 sleeps_at = a.name  # carried forward: the hotel only appears on check-in day
     return Trip(trip_id=trip_id, itinerary_id=itinerary_id, place_identity=raw.get("place_identity"),
-                origin=origin, ignored_user_preference=raw.get("ignored_user_preference", []),
-                preferences=prefs, days=days)
+                origin=origin, destination=destination,
+                ignored_user_preference=raw.get("ignored_user_preference", []), preferences=prefs, days=days)
 
 
 class ItineraryLoader(Protocol):

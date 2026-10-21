@@ -1,0 +1,10 @@
+# Stored weather scenarios for test-set days beyond the 16-day forecast horizon.
+dubai_clear_warm: { temp_c: { morning: 25, midday: 31, evening: 27 } }
+dubai_hot_midday: { temp_c: { morning: 29, midday: 38, evening: 32 } }   # stress case: heat vs an outdoor plan
+bali_clear:       { temp_c: { morning: 26, midday: 31, evening: 27 } }
+bali_rain_afternoon:
+  temp_c: { morning: 26, midday: 29, evening: 26 }
+  rain: [ { from: "13:00", to: "17:00", prob: 85, mm: 6.0 } ]
+bali_rain_all_day:
+  temp_c: { morning: 25, midday: 27, evening: 25 }
+  rain: [ { from: "06:00", to: "23:00", prob: 90, mm: 8.0 } ]
