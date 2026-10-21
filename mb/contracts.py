@@ -99,7 +99,7 @@ class Trip(Contract):
 
 
 # ---------- Context package ----------
-Freshness = Literal["live", "cached", "fixture", "unavailable", "not_fetched"]
+Freshness = Literal["live", "cached", "fixture", "estimated", "unavailable", "not_fetched"]
 
 
 class Window(Contract):
@@ -134,6 +134,13 @@ class PlaceInfo(Contract):
     periods: list[OpeningPeriod] = []
     hours_text: list[str] = []
     source: Freshness
+
+class TravelLeg(Contract):
+    from_id: str
+    to_id: str
+    minutes: int = Field(ge=0)
+    km: float = Field(ge=0)
+    source: Freshness                  # live/cached from Routes, or "estimated" if Routes failed
 
 
 class Context(Contract):
