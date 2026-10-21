@@ -119,6 +119,22 @@ class WeatherDay(Contract):
     scenario: str | None = None        # set when this is a stored test scenario, not a forecast
     hours: list[HourWeather] = []
 
+class OpeningPeriod(Contract):
+    day: int = Field(ge=0, le=6)       # Google's numbering: 0 = Sunday
+    open: dt.time
+    close: dt.time | None = None       # None = open 24 hours
+
+class PlaceInfo(Contract):
+    place_id: str
+    name: str
+    address: str | None = None
+    lat: float | None = None
+    lon: float | None = None
+    business_status: str | None = None # OPERATIONAL, CLOSED_TEMPORARILY, CLOSED_PERMANENTLY
+    periods: list[OpeningPeriod] = []
+    hours_text: list[str] = []
+    source: Freshness
+
 
 class Context(Contract):
     ctx_id: str

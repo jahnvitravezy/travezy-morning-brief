@@ -1,5 +1,5 @@
 # USD per call. PLACEHOLDERS: check each against the provider's pricing page before the first live run.
-google_places_text_search: 0.032
+google_places_text_search: 0.035   # Text Search with opening hours (Enterprise tier) - verify on pricing page
 google_places_details: 0.017
 google_routes_matrix_element: 0.005
 tavily_search: 0.008
