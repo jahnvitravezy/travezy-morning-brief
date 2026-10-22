@@ -100,3 +100,40 @@ def test_museum_is_indoor():
     trip = FileLoader().load("dubai_up01")
     museum = next(a for a in trip.days[1].activities if a.name == "Museum of the Future")
     assert not is_outdoor(museum)
+
+
+
+def _bali_rain_ctx(trip_id="bali_up04", day=1):
+    import datetime as dt
+    from mb.contracts import HourWeather, WeatherDay
+    ctx = build_context(FileLoader().load(trip_id), day)
+    rain = [HourWeather(hour=dt.time(h), temp_c=28, rain_prob=85 if 13 <= h < 17 else 5, rain_mm=0)
+            for h in range(6, 23)]
+    return ctx.model_copy(update={"weather": WeatherDay(location="Bali", source="fixture", hours=rain)})
+
+
+def test_dry_windows_bracket_the_rain():
+    from mb.agents.facts import dry_windows
+    assert dry_windows(_bali_rain_ctx()) == ["08:00-13:00", "17:00-21:00"]
+
+
+def test_pace_checks_catch_late_dinner_and_late_finish():
+    from mb.agents.facts import pace_checks
+    checks = pace_checks(_bali_rain_ctx())
+    assert any(c.startswith("Zest Ubud at 19:30") for c in checks)
+    assert any("ends around 22:30" in c for c in checks)
+
+
+def test_departure_flight_is_not_a_late_finish():
+    from mb.agents.facts import pace_checks
+    ctx = build_context(FileLoader().load("bali_up04"), 4)
+    assert not any("Flight" in c for c in pace_checks(ctx))
+
+
+def test_cash_items_carry_their_cost(dubai_day2):
+    must = json.loads(brief_input(dubai_day2))["must_mention"]
+    assert "Dubai Creek abra: cash only (AED 1 per person)" in must
+
+
+def test_every_meal_is_sent_for_a_diet_check(dubai_day2):
+    assert json.loads(brief_input(dubai_day2))["meals_to_check"] == ["Al Ustad Special Kebab"]

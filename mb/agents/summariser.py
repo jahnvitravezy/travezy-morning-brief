@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from mb.agents.facts import load_fx, spend, timeline, weather_clashes
+from mb.agents.facts import dry_windows, load_fx, pace_checks, spend, timeline, weather_clashes
 from mb.config import AgentSpec
 from mb.contracts import Context, Summary, SummaryText
 from mb.llm import LLM, LLMResult, load_prompt
@@ -32,7 +32,8 @@ def brief_input(ctx: Context) -> str:
     names = {a.id: a.name for a in acts}
     must = [f"{a.name}: {'pickup' if 'pickup' in a.note.lower() else 'timed entry'} at {a.timed_at:%H:%M}"
             for a in acts if a.timed_at]
-    must += [f"{a.name}: {a.note}" for a in acts if "cash" in a.note.lower()]
+    must += [f"{a.name}: cash only" + (f" ({a.cost_text})" if a.cost_text else "")
+             for a in acts if "cash" in a.note.lower()]
     return json.dumps({
         "date": ctx.date.isoformat(), "weekday": f"{ctx.date:%A}", "day_title": ctx.day.title,
         "destination": ctx.region, "destination_day": ctx.day.index + 1,
@@ -46,7 +47,10 @@ def brief_input(ctx: Context) -> str:
                                  for l in ctx.legs],
         "weather_overall": ctx.weather.hours and f"{min(h.temp_c for h in ctx.weather.hours):.0f}-"
                            f"{max(h.temp_c for h in ctx.weather.hours):.0f}C" if ctx.weather else None,
+        "meals_to_check": [a.name for a in acts if a.kind == "eat"],
         "weather_clashes": weather_clashes(ctx),
+        "dry_windows": dry_windows(ctx),
+        "pace_checks": pace_checks(ctx),
         "must_mention": must,
         "data_flags": [f.message for f in ctx.flags],
     }, indent=1, ensure_ascii=False)

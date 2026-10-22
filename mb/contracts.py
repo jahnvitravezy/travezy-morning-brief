@@ -241,8 +241,15 @@ class MorningBrief(Contract):
 
 # ---------- Agent outputs ----------
 
+class MealCheck(Contract):
+    item: str
+    fits_diet: bool
+    reason: str = ""
+
+
 class SummaryText(Contract):
     """The parts of out.summary the model writes. Facts (timeline, spend) are computed in code."""
+    meal_checks: list[MealCheck] = []  # one verdict per meal, filled before anything else
     conflicts: list[str] = []          # filled FIRST: each plan item that clashes with the travellers
     notification_title: str
     """The parts of out.summary the model writes. Facts (timeline, spend) are computed in code."""
