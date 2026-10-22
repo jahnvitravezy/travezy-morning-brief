@@ -105,6 +105,7 @@ Freshness = Literal["live", "cached", "fixture", "estimated", "unavailable", "no
 class Window(Contract):
     start: dt.time
     end: dt.time
+    travel_min: int | None = None      # travel already needed inside this window, to the next stop
     
 class HourWeather(Contract):
     hour: dt.time
@@ -146,7 +147,13 @@ class WebResult(Contract):
     title: str
     url: str
     snippet: str = ""
-    score: float = 0.0             # live/cached from Routes, or "estimated" if Routes failed
+    score: float = 0.0 
+    
+class Flag(Contract):
+    code: Literal["hours_conflict", "closed", "closes_during_visit", "hours_unknown", "place_not_found",
+                  "travel_estimated", "tight_connection"]
+    activity_id: str | None = None
+    message: str                       # plain English: shown to the judge and, if relevant, the user            # live/cached from Routes, or "estimated" if Routes failed
 
 
 class Context(Contract):
@@ -160,6 +167,9 @@ class Context(Contract):
     timezone: str | None = None        # filled by the source layer
     send_at_local: dt.time | None = None
     weather: WeatherDay | None = None
+    places: dict[str, PlaceInfo] = {}  # keyed by activity id
+    legs: list[TravelLeg] = []
+    flags: list[Flag] = []
     freshness: dict[str, Freshness]
 
 

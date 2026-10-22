@@ -6,6 +6,7 @@ context is still built, with that source marked unavailable.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from datetime import date, datetime, time
@@ -13,8 +14,11 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from mb.contracts import Context, Preferences, Trip, TripDay, Window
+from mb.budget import BudgetExceeded
+from mb.contracts import Context, Flag, Preferences, TravelLeg, Trip, TripDay, Window
 from mb.sources.openmeteo import OpenMeteo
+from mb.sources.places import GooglePlaces, hours_on, is_open
+from mb.sources.routes import GoogleRoutes
 
 DAY_START = time(8, 0)
 DAY_END = time(22, 0)
@@ -95,9 +99,94 @@ def build_context(trip: Trip, index: int, arrival_offset_min: int = 0) -> Contex
                   other_days=other, freshness={s: "not_fetched" for s in SOURCES})
     return _finalize(ctx)
 
+STOP_KINDS = ("do", "eat", "stay")
+
+
+async def _lookup_places(day: TripDay, near: str, places: GooglePlaces, run_id: str):
+    stops = [a for a in day.activities if a.kind in STOP_KINDS]
+    results = await asyncio.gather(
+        *(places.lookup(f"{a.name}, {a.address or near}", run_id) for a in stops), return_exceptions=True)
+    found, flags, statuses = {}, [], set()
+    for a, r in zip(stops, results):
+        if isinstance(r, BudgetExceeded):
+            raise r                                   # never swallow the budget cap
+        if isinstance(r, Exception) or r is None:
+            flags.append(Flag(code="place_not_found", activity_id=a.id,
+                              message=f"{a.name}: could not be verified on Google Places"))
+            continue
+        found[a.id] = r
+        statuses.add(r.source)
+        if a.kind == "stay":
+            continue
+        if r.business_status == "CLOSED_PERMANENTLY":
+            flags.append(Flag(code="closed", activity_id=a.id, message=f"{a.name}: listed as permanently closed"))
+            continue
+        ok = is_open(r, day.date, a.start, a.end or a.start)
+        if ok is False and a.booked:   # live data never overrides a booking
+            flags.append(Flag(code="hours_conflict", activity_id=a.id,
+                              message=f"{a.name}: Google lists different hours. The booking stands; "
+                                      f"check with the venue if unsure"))
+        elif ok is False:
+            open_at_start = [(o, c) for o, c in hours_on(r, day.date) if o <= a.start < c]
+            if open_at_start:
+                close = open_at_start[0][1]
+                flags.append(Flag(code="closes_during_visit", activity_id=a.id,
+                                  message=f"{a.name}: closes at {close:%H:%M}, before the planned end "
+                                          f"at {(a.end or a.start):%H:%M}"))
+            else:
+                flags.append(Flag(code="closed", activity_id=a.id,
+                                  message=f"{a.name}: Google lists it as closed at {a.start:%H:%M}"))
+        elif ok is None:
+            flags.append(Flag(code="hours_unknown", activity_id=a.id,
+                              message=f"{a.name}: opening hours are not published"))
+    status = "live" if "live" in statuses else "cached" if "cached" in statuses else "unavailable"
+    return found, flags, status
+
+
+async def _travel(day: TripDay, found: dict, routes: GoogleRoutes, run_id: str):
+    pairs, prev = [], None
+    for a in day.activities:
+        if a.kind == "move":
+            prev = None                               # the move itself is the travel
+            continue
+        if a.id not in found or found[a.id].lat is None:
+            prev = None
+            continue
+        if prev:
+            pairs.append((prev, a))
+        prev = a
+    results = await asyncio.gather(*(
+        routes.leg((found[p.id].lat, found[p.id].lon), (found[n.id].lat, found[n.id].lon), run_id)
+        for p, n in pairs))
+    legs, flags, statuses = [], [], set()
+    for (p, n), (minutes, km, src) in zip(pairs, results):
+        legs.append(TravelLeg(from_id=p.id, to_id=n.id, minutes=minutes, km=km, source=src))
+        statuses.add(src)
+        if src == "estimated":
+            flags.append(Flag(code="travel_estimated", activity_id=n.id,
+                              message=f"{p.name} to {n.name}: travel time is an estimate"))
+        gap = _m(n.start) - _m(p.end or p.start)
+        if minutes > gap:
+            flags.append(Flag(code="tight_connection", activity_id=n.id,
+                              message=f"{p.name} to {n.name}: about {minutes} min of travel, {gap} min gap"))
+    status = ("live" if "live" in statuses else "cached" if "cached" in statuses
+              else "estimated" if statuses else "not_fetched")
+    return legs, flags, status
+
+
+def _with_travel(windows: list[Window], day: TripDay, legs: list[TravelLeg]) -> list[Window]:
+    ends = {a.id: a.end for a in day.activities}
+    out = []
+    for w in windows:
+        leg = next((l for l in legs if ends.get(l.from_id) == w.start), None)
+        out.append(w.model_copy(update={"travel_min": leg.minutes if leg else None}))
+    return out
+
 
 async def build_full_context(trip: Trip, index: int, meteo: OpenMeteo,
-                             weather_scenario: str | None = None, today: date | None = None) -> Context:
+                             weather_scenario: str | None = None, today: date | None = None,
+                             places: GooglePlaces | None = None, routes: GoogleRoutes | None = None,
+                             run_id: str = "adhoc") -> Context:
     day = trip.days[index]
     fresh: dict[str, str] = {}
     tz, dest, offset = None, None, 0
@@ -123,7 +212,17 @@ async def build_full_context(trip: Trip, index: int, meteo: OpenMeteo,
         except (httpx.HTTPError, KeyError):
             fresh["weather"] = "unavailable"
 
+    found, legs, flags = {}, [], []
+    if places:
+        found, flags, fresh["places"] = await _lookup_places(day, trip.destination or "", places, run_id)
+    if routes and found:
+        legs, more, fresh["routes"] = await _travel(day, found, routes, run_id)
+        flags += more
+
     base = build_context(trip, index, arrival_offset_min=offset)
-    ctx = base.model_copy(update={"timezone": tz, "send_at_local": send_time(day), "weather": weather,
-                                  "freshness": {**base.freshness, **fresh}})
+    ctx = base.model_copy(update={
+        "timezone": tz, "send_at_local": send_time(day), "weather": weather,
+        "places": found, "legs": legs, "flags": flags,
+        "free_windows": _with_travel(base.free_windows, day, legs),
+        "freshness": {**base.freshness, **fresh}})
     return _finalize(ctx)

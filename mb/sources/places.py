@@ -30,6 +30,10 @@ def _period(p: dict) -> OpeningPeriod:
         close = dt.time(c.get("hour", 0), c.get("minute", 0)) if same_day else dt.time(23, 59)
     return OpeningPeriod(day=o.get("day", 0), open=dt.time(o.get("hour", 0), o.get("minute", 0)), close=close)
 
+def hours_on(info: PlaceInfo, on: dt.date) -> list[tuple[dt.time, dt.time]]:
+    """Opening periods for that date, as (open, close)."""
+    google_day = (on.weekday() + 1) % 7
+    return [(p.open, p.close or dt.time(23, 59)) for p in info.periods if p.day == google_day]
 
 def is_open(info: PlaceInfo, on: dt.date, start: dt.time, end: dt.time) -> bool | None:
     """True if open for the whole visit, False if closed, None if hours aren't published."""
