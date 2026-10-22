@@ -5,3 +5,5 @@ __pycache__/
 data/cache/
 data/usage/
 data/usage/
+*.txt
+!requirements.txt

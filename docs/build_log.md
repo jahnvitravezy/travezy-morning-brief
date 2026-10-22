@@ -1,0 +1,1 @@
+Summariser v1 manual check: about 55/100. Missed vegetarian clash, timed entry, wrong weather clash, wrong city. Fixed in v2 by moving time alignment into code and making conflicts explicit.
