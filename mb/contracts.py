@@ -140,7 +140,13 @@ class TravelLeg(Contract):
     to_id: str
     minutes: int = Field(ge=0)
     km: float = Field(ge=0)
-    source: Freshness                  # live/cached from Routes, or "estimated" if Routes failed
+    source: Freshness     
+    
+class WebResult(Contract):
+    title: str
+    url: str
+    snippet: str = ""
+    score: float = 0.0             # live/cached from Routes, or "estimated" if Routes failed
 
 
 class Context(Contract):
