@@ -79,3 +79,24 @@ def test_timed_entries_are_must_mention(dubai_day2):
     must = json.loads(brief_input(dubai_day2))["must_mention"]
     assert any("Museum of the Future" in m and "15:00" in m for m in must)
     assert any("cash" in m.lower() for m in must)
+
+def test_weather_clash_is_found_in_code_for_outdoor_items_only():
+    import datetime as dt
+    from mb.agents.facts import is_outdoor, weather_clashes
+    from mb.contracts import HourWeather, WeatherDay
+    trip = FileLoader().load("bali_up04")
+    ctx = build_context(trip, 1)
+    rain = [HourWeather(hour=dt.time(h), temp_c=28, rain_prob=85 if 13 <= h < 17 else 5, rain_mm=0)
+            for h in range(6, 23)]
+    ctx = ctx.model_copy(update={"weather": WeatherDay(location="Bali", source="fixture", hours=rain)})
+    clashes = weather_clashes(ctx)
+    assert len(clashes) == 1 and clashes[0].startswith("Sacred Monkey Forest Sanctuary 16:00")
+    by_name = {a.name: a for a in ctx.day.activities}
+    assert not is_outdoor(by_name["Clear Cafe"]) and is_outdoor(by_name["Tegallalang Rice Terrace"])
+
+
+def test_museum_is_indoor():
+    from mb.agents.facts import is_outdoor
+    trip = FileLoader().load("dubai_up01")
+    museum = next(a for a in trip.days[1].activities if a.name == "Museum of the Future")
+    assert not is_outdoor(museum)

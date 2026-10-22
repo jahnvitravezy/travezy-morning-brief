@@ -4,7 +4,7 @@
   inputs: [ctx.trip_day, src.weather, src.places]
   output: out.summary
   model: openai/gpt-4o
-  prompt_version: summariser-v2
+  prompt_version: summariser-v3
   timeout_s: 30
 
 - id: mb.surprise_finder.v1
