@@ -93,7 +93,7 @@ def build_context(trip: Trip, index: int, arrival_offset_min: int = 0) -> Contex
     day = trip.days[index]
     other = sorted({a.name for d in trip.days if d.index != index
                     for a in d.activities if a.kind in ("do", "eat")})
-    ctx = Context(ctx_id="pending", trip_id=trip.trip_id, date=day.date, day=day,
+    ctx = Context(ctx_id="pending", trip_id=trip.trip_id, date=day.date, region=trip.region, day=day,
                   preferences=trip.preferences,
                   free_windows=free_windows(day, trip.preferences, arrival_offset_min=arrival_offset_min),
                   other_days=other, freshness={s: "not_fetched" for s in SOURCES})

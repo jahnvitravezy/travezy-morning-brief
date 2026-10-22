@@ -93,6 +93,7 @@ class Trip(Contract):
     place_identity: str | None = None
     origin: str | None = None
     destination: str | None = None
+    region: str | None = None          # e.g. "Bali", "Dubai": what the traveller calls the place
     ignored_user_preference: list[str] = []
     preferences: Preferences
     days: list[TripDay]
@@ -160,6 +161,7 @@ class Context(Contract):
     ctx_id: str
     trip_id: str
     date: dt.date
+    region: str | None = None
     day: TripDay
     preferences: Preferences
     free_windows: list[Window]
@@ -236,3 +238,25 @@ class MorningBrief(Contract):
     confidence: Confidence = Confidence()
     actions: list[Literal["add_to_day", "swap", "ask"]] = []
     meta: Meta = Meta()
+
+# ---------- Agent outputs ----------
+
+class SummaryText(Contract):
+    """The parts of out.summary the model writes. Facts (timeline, spend) are computed in code."""
+    conflicts: list[str] = []          # filled FIRST: each plan item that clashes with the travellers
+    notification_title: str
+    """The parts of out.summary the model writes. Facts (timeline, spend) are computed in code."""
+    notification_title: str
+    notification_body: str
+    heads_ups: list[str] = []
+    weather_summary: str
+    weather_clash: str | None = None
+    suggested_swap: str | None = None
+    local_tip: str
+
+class Summary(Contract):
+    """out.summary"""
+    agent_id: str
+    text: SummaryText
+    timeline: list[TimelineItem]
+    spend: Spend

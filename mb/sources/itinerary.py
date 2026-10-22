@@ -42,6 +42,14 @@ def parse_duration(s: str | None) -> int | None:
         return None
     return sum(int(n) * (60 if unit.lower().startswith("h") else 1) for n, unit in parts)
 
+def _region(addresses: list[str]) -> str | None:
+    """The word shared by most address endings: 'Bali', 'Dubai'."""
+    from collections import Counter
+    words = Counter(w for a in addresses for w in set(a.split(",")[-1].split()))
+    if not words:
+        return None
+    word, n = words.most_common(1)[0]
+    return word if n >= 0.6 * len(addresses) else None
 
 def parse_cost(text: str | None) -> Money | None:
     if not text:
@@ -82,7 +90,11 @@ def _activity(trip_id: str, d: int, i: int, raw: dict) -> Activity:
                         address=raw.get("eat_addr"), **common)
     if kind == "move":
         mins = parse_duration(raw.get("duration")) or 30
-        name = f'{raw.get("move_type", "move")} {raw.get("move_no", "")}'.strip()
+        mode, ref = raw.get("move_type", "move"), (raw.get("move_no") or "").strip()
+        if mode == "car" or mode.replace("_", " ").lower() in ref.lower():
+            name = ref or mode                       # "Private driver", "Dubai Creek abra"
+        else:
+            name = f"{mode.replace('_', ' ').title()} {ref}".strip()   # "Flight EK501"
         return Activity(kind="move", end=_add(start, mins), name=name,
                         move_mode=raw.get("move_type"), **common)
     if kind == "relax_at_hotel_or_explore":
@@ -109,8 +121,9 @@ def parse_trip(trip_id: str, itinerary_id: str, raw: dict, prefs: Preferences) -
         for a in acts:
             if a.kind == "stay":
                 sleeps_at = a.name  # carried forward: the hotel only appears on check-in day
+    region = _region([a.address for d in days for a in d.activities if a.address])
     return Trip(trip_id=trip_id, itinerary_id=itinerary_id, place_identity=raw.get("place_identity"),
-                origin=origin, destination=destination,
+                origin=origin, destination=destination, region=region,
                 ignored_user_preference=raw.get("ignored_user_preference", []), preferences=prefs, days=days)
 
 
