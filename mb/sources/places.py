@@ -19,7 +19,7 @@ TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 SKU = "google_places_text_search"
 # The field mask controls cost: ask only for what the brief needs.
 FIELDS = ",".join(["places.id", "places.displayName", "places.formattedAddress", "places.location",
-                   "places.businessStatus", "places.regularOpeningHours"])
+                   "places.businessStatus", "places.regularOpeningHours", "places.rating", "places.types"])
 
 
 def _period(p: dict) -> OpeningPeriod:
@@ -71,13 +71,34 @@ class GooglePlaces:
             found = r.json().get("places") or []
             hit, source = (found[0] if found else {}), "live"
             self.cache.set(key, hit)
-        if not hit:
-            return None
+        return self._parse(hit, source, query) if hit else None
+
+    async def search_near(self, query: str, lat: float, lon: float, run_id: str,
+                          radius_m: int = 1500, n: int = 5) -> list[PlaceInfo]:
+        """Up to n places matching the query, biased to a circle around (lat, lon). Cached."""
+        key = {"near": query.lower().strip(), "lat": round(lat, 3), "lon": round(lon, 3), "r": radius_m, "n": n}
+        hit, source = self.cache.get(key), "cached"
+        if hit is None:
+            self.budget.check(self.budget.prices[SKU])
+            r = await self.client.post(
+                TEXT_SEARCH_URL,
+                json={"textQuery": query, "pageSize": n, "locationBias": {"circle": {
+                    "center": {"latitude": lat, "longitude": lon}, "radius": float(radius_m)}}},
+                headers={"X-Goog-Api-Key": self.key, "X-Goog-FieldMask": FIELDS})
+            r.raise_for_status()
+            self.budget.record_call(run_id=run_id, sku=SKU)
+            hit, source = r.json().get("places") or [], "live"
+            self.cache.set(key, hit)
+        return [self._parse(p, source, query) for p in hit if p.get("id")]
+
+    @staticmethod
+    def _parse(hit: dict, source: str, fallback_name: str) -> PlaceInfo:
         hours = hit.get("regularOpeningHours") or {}
         loc = hit.get("location") or {}
         return PlaceInfo(
-            place_id=hit["id"], name=(hit.get("displayName") or {}).get("text", query),
+            place_id=hit["id"], name=(hit.get("displayName") or {}).get("text", fallback_name),
             address=hit.get("formattedAddress"), lat=loc.get("latitude"), lon=loc.get("longitude"),
             business_status=hit.get("businessStatus"),
             periods=[_period(p) for p in hours.get("periods", [])],
-            hours_text=hours.get("weekdayDescriptions", []), source=source)
+            hours_text=hours.get("weekdayDescriptions", []), rating=hit.get("rating"),
+            types=hit.get("types", []), source=source)

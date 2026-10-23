@@ -186,7 +186,7 @@ def _with_travel(windows: list[Window], day: TripDay, legs: list[TravelLeg]) -> 
 async def build_full_context(trip: Trip, index: int, meteo: OpenMeteo,
                              weather_scenario: str | None = None, today: date | None = None,
                              places: GooglePlaces | None = None, routes: GoogleRoutes | None = None,
-                             run_id: str = "adhoc") -> Context:
+                             run_id: str = "adhoc", providers: list | None = None) -> Context:
     day = trip.days[index]
     fresh: dict[str, str] = {}
     tz, dest, offset = None, None, 0
@@ -225,4 +225,10 @@ async def build_full_context(trip: Trip, index: int, meteo: OpenMeteo,
         "places": found, "legs": legs, "flags": flags,
         "free_windows": _with_travel(base.free_windows, day, legs),
         "freshness": {**base.freshness, **fresh}})
+    if providers:  # Agent 2's candidates belong to the context, so every model sees the same set
+        from mb.sources.candidates import gather_candidates
+        cands = await gather_candidates(ctx, providers, run_id)
+        web = [c for c in cands if c.provider == "tavily"]
+        ctx = ctx.model_copy(update={"candidates": cands, "freshness": {
+            **ctx.freshness, "web_search": "live" if web else ctx.freshness.get("web_search", "not_fetched")}})
     return _finalize(ctx)

@@ -135,6 +135,8 @@ class PlaceInfo(Contract):
     business_status: str | None = None # OPERATIONAL, CLOSED_TEMPORARILY, CLOSED_PERMANENTLY
     periods: list[OpeningPeriod] = []
     hours_text: list[str] = []
+    rating: float | None = None
+    types: list[str] = []
     source: Freshness
 
 class TravelLeg(Contract):
@@ -157,6 +159,22 @@ class Flag(Contract):
     message: str                       # plain English: shown to the judge and, if relevant, the user            # live/cached from Routes, or "estimated" if Routes failed
 
 
+class Candidate(Contract):
+    """A verifiable thing to do in a free window. Agent 2 may only choose from these."""
+    id: str                            # "places:<place_id>" or "web:<n>"
+    provider: str                      # google_places, tavily (Viator later)
+    name: str
+    window: Window
+    place_id: str | None = None
+    source_url: str | None = None
+    lat: float | None = None
+    lon: float | None = None
+    travel_min: int | None = None      # from the previous stop (estimated); None if location unknown
+    rating: float | None = None
+    types: list[str] = []
+    snippet: str = ""
+
+
 class Context(Contract):
     ctx_id: str
     trip_id: str
@@ -172,6 +190,7 @@ class Context(Contract):
     places: dict[str, PlaceInfo] = {}  # keyed by activity id
     legs: list[TravelLeg] = []
     flags: list[Flag] = []
+    candidates: list[Candidate] = []   # for Agent 2, gathered once so every model sees the same set
     freshness: dict[str, Freshness]
 
 
@@ -267,3 +286,21 @@ class Summary(Contract):
     text: SummaryText
     timeline: list[TimelineItem]
     spend: Spend
+
+class SurprisePick(Contract):
+    candidate_id: str
+    why_you: str
+
+
+class SurprisePicks(Contract):
+    """What the Surprise finder model returns: choices from the candidate list only."""
+    picks: list[SurprisePick] = []
+    none_reason: str | None = None     # when the right answer is no surprise
+
+
+class Surprises(Contract):
+    """out.surprises"""
+    agent_id: str
+    items: list[SurpriseItem] = []
+    none_reason: str | None = None
+    dropped: list[str] = []            # picks rejected by code checks, with the reason
