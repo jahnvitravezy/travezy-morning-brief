@@ -1,0 +1,12 @@
+.venv
+.git
+.env
+*.txt
+!requirements.txt
+__pycache__
+.pytest_cache
+data/cache
+data/usage
+tests
+docs
+scripts

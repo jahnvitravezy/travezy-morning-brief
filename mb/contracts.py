@@ -304,3 +304,11 @@ class Surprises(Contract):
     items: list[SurpriseItem] = []
     none_reason: str | None = None
     dropped: list[str] = []            # picks rejected by code checks, with the reason
+
+
+class ComposerText(Contract):
+    """What the Composer model writes: the final words, after merging and any fix request."""
+    notification_title: str
+    notification_body: str
+    heads_ups: list[str] = []
+    local_tip: str = ""

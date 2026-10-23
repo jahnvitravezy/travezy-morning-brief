@@ -22,7 +22,7 @@
   inputs: [ctx.trip_day, out.summary, out.surprises]
   output: out.draft
   model: openai/gpt-4o
-  prompt_version: composer-v1
+  prompt_version: composer-v2
   timeout_s: 30
 
 - id: mb.judge.v1

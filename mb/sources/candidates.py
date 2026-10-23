@@ -12,19 +12,44 @@ import datetime as dt
 import hashlib
 from typing import Protocol
 
+import yaml
+from pydantic import BaseModel, ConfigDict, Field
+
+from mb.config import CONFIG_DIR
 from mb.contracts import Activity, Candidate, Context, Window
 from mb.sources.places import GooglePlaces, is_open
 from mb.sources.routes import estimate, haversine_km
 from mb.sources.tavily import Tavily
 
-VISIT_MIN = 45               # minimum useful visit
 WALK_KMH = 4.5
 WALK_MAX_KM = 1.2            # beyond this, assume a taxi
-LATEST_START = dt.time(21, 0)  # safety: no suggestions starting late at night
-MAX_PER_WINDOW = 6
-OUTDOOR_TYPES = {"park", "beach", "natural_feature", "hiking_area", "campground", "garden", "zoo"}
-ADULT_TYPES = {"bar", "night_club", "casino", "liquor_store"}
 FOOD_WORDS = ("cafe", "restaurant", "food", "dining", "tea", "dessert", "bakery")
+
+
+class CandidateRules(BaseModel):
+    """config/candidates.yaml, validated on load."""
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    visit_min: int = Field(gt=0)
+    latest_start: dt.time
+    max_per_window: int = Field(gt=0)
+    interest_queries: dict[str, str]
+    allowed_types: set[str]
+    allowed_type_suffixes: list[str]
+    excluded_types: set[str]
+    outdoor_types: set[str]
+    adult_types: set[str]
+
+    def visitable(self, types: list[str]) -> bool:
+        t = set(types)
+        if t & self.excluded_types:
+            return False
+        return bool(t & self.allowed_types) or any(x.endswith(s) for x in t for s in self.allowed_type_suffixes)
+
+
+RULES = CandidateRules(**yaml.safe_load((CONFIG_DIR / "candidates.yaml").read_text(encoding="utf-8")))
+VISIT_MIN = RULES.visit_min
+LATEST_START = RULES.latest_start
+MAX_PER_WINDOW = RULES.max_per_window
 
 
 def _m(t: dt.time) -> int:
@@ -46,8 +71,9 @@ def queries_for(ctx: Context) -> list[str]:
     veg = "vegetarian" in ctx.preferences.diet.restrictions
     out = []
     for interest in (ctx.preferences.interests or ["things to do"])[:2]:
-        food = any(w in interest.lower() for w in FOOD_WORDS)
-        out.append(f"{'vegetarian ' if veg and food else ''}{interest}")
+        phrase = RULES.interest_queries.get(interest.lower(), interest)
+        food = any(w in phrase.lower() for w in FOOD_WORDS)
+        out.append(f"{'vegetarian ' if veg and food else ''}{phrase}")
     return out
 
 
@@ -103,7 +129,9 @@ class PlacesCandidates:
             seen.add(info.place_id)
             if info.name.lower() in planned or (info.business_status or "OPERATIONAL") != "OPERATIONAL":
                 continue
-            if ctx.preferences.party.children_ages and ADULT_TYPES & set(info.types):
+            if not RULES.visitable(info.types):
+                continue                                 # e.g. a photo studio or a hotel
+            if ctx.preferences.party.children_ages and RULES.adult_types & set(info.types):
                 continue
             t_in = travel_minutes(here, (info.lat, info.lon))
             t_out = travel_minutes((info.lat, info.lon), nxt) if nxt else 0
@@ -112,7 +140,7 @@ class PlacesCandidates:
             start, end = _t(_m(w.start) + t_in), _t(_m(w.start) + t_in + VISIT_MIN)
             if is_open(info, ctx.date, start, end) is False:
                 continue
-            if OUTDOOR_TYPES & set(info.types) and _rainy(ctx, start, end):
+            if RULES.outdoor_types & set(info.types) and _rainy(ctx, start, end):
                 continue
             out.append(Candidate(id=f"places:{info.place_id}", provider=self.name, name=info.name, window=w,
                                  place_id=info.place_id,

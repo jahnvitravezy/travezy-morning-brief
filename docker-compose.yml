@@ -1,0 +1,9 @@
+services:
+  api:
+    build: .
+    env_file: .env                 # keys stay on the machine, never in the image
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/cache:/app/data/cache    # keep paid lookups between runs
+      - ./data/usage:/app/data/usage    # one budget ledger, inside and outside Docker

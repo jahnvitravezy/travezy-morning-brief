@@ -68,7 +68,8 @@ async def test_candidates_are_in_the_context_hash():
 def test_vegetarian_food_queries():
     ctx_prefs = FileLoader().load("dubai_up01")
     from mb.context import build_context
-    assert queries_for(build_context(ctx_prefs, 1))[0] == "vegetarian cafes"
+    qs = queries_for(build_context(ctx_prefs, 1))
+    assert qs == ["vegetarian cafe", "scenic photo spot viewpoint"]
 
 
 async def test_validation_drops_invented_duplicate_slot_and_extra_picks():
@@ -111,3 +112,11 @@ async def test_items_come_from_candidate_data_not_the_model():
 
 def test_surprise_prompt_exists():
     assert load_prompt(load_config().agents["mb.surprise_finder.v1"].prompt_version)
+
+
+async def test_studios_and_hotels_are_not_surprises():
+    nearby = [info("Future Photo Studio", types=("manufacturer", "store", "service")),
+              info("Heritage Stay", types=("hotel", "lodging")),
+              info("Photo View Point", types=("tourist_attraction",))]
+    names = {c.name for c in (await _ctx(nearby)).candidates}
+    assert names == {"Photo View Point"}

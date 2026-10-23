@@ -1,0 +1,43 @@
+# Rules for Agent 2's candidates (mb/sources/candidates.py). Change behaviour here, not in code.
+visit_min: 45                 # minimum useful visit, minutes
+latest_start: "21:00"         # safety: nothing suggested to start later than this
+max_per_window: 6
+
+# What to search for, per trip interest. Plain interests return the wrong kind of business:
+# "photography" returned photo studios, "heritage" returned hotels and clothing shops.
+interest_queries:
+  photography: scenic photo spot viewpoint
+  sunset spots: sunset viewpoint
+  local markets: local market
+  cafes: cafe
+  heritage: heritage site
+  temples: temple
+  gardens: garden
+  culture: cultural attraction
+  quiet restaurants: quiet restaurant
+  theme parks: theme park
+  aquariums: aquarium
+  beaches: beach
+  easy short walks: promenade walk
+  adventure activities: adventure activity
+  street food: street food market
+  nightlife: nightlife
+  hidden spots: hidden gem attraction
+  shopping: shopping street
+  beach clubs: beach club
+  spas: spa
+  rooftop dining: rooftop restaurant
+
+# A candidate must have at least one allowed type (or a type ending in an allowed suffix)
+# and no excluded type. This keeps out studios, hotels and shops that only match by name.
+allowed_types: [tourist_attraction, museum, art_museum, art_gallery, park, garden, beach,
+                cafe, coffee_shop, tea_house, restaurant, bakery, juice_shop, dessert_shop,
+                ice_cream_shop, market, hindu_temple, buddhist_temple, mosque, church,
+                historical_landmark, historical_place, cultural_landmark, monument, aquarium,
+                amusement_park, zoo, spa, shopping_mall, observation_deck, bar, night_club,
+                hiking_area, marina, plaza]
+allowed_type_suffixes: [_restaurant]
+excluded_types: [lodging, hotel, resort_hotel, private_guest_room, manufacturer, clothing_store,
+                 electronics_store, home_goods_store, gift_shop]
+outdoor_types: [park, beach, natural_feature, hiking_area, campground, garden, zoo, marina]
+adult_types: [bar, night_club, casino, liquor_store]
