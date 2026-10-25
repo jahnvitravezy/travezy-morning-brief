@@ -1,6 +1,6 @@
 """Runs a test set through the full pipeline and stores everything needed to compare runs.
 
-  python -m mb.evals.runner baseline
+  python -m mb.evals.runner baseline            (add --rebuild after a change to how contexts are built)
 
 Contexts are built once per test day and saved; later runs reuse them, so every model is
 compared on exactly the same inputs and no Places search is paid for twice. For each day the
@@ -54,12 +54,13 @@ async def contexts_for(testset: TestSet, s: Services, rebuild: bool = False) -> 
     return out
 
 
-async def run_testset(run_id: str, testset: TestSet, s: Services, cfg=None, concurrency: int = 3) -> list[dict]:
+async def run_testset(run_id: str, testset: TestSet, s: Services, cfg=None, concurrency: int = 3,
+                      rebuild: bool = False) -> list[dict]:
     cfg = cfg or s.cfg
     rubric = next(r for r in cfg.rubrics.values() if r.use_case == testset.use_case)
     out_dir = RUNS / run_id
     (out_dir / "briefs").mkdir(parents=True, exist_ok=True)
-    contexts = await contexts_for(testset, s)
+    contexts = await contexts_for(testset, s, rebuild)
     sem = asyncio.Semaphore(concurrency)
 
     async def one(day: TestDay) -> dict:
@@ -94,13 +95,14 @@ def summary(records: list[dict]) -> dict:
             "total_cost_usd": round(sum(r["cost_usd"] for r in records), 4)}
 
 
-async def main(run_id: str):
+async def main(run_id: str, rebuild: bool = False):
     s = Services()
     started = time.perf_counter()
-    records = await run_testset(run_id, load_testset(), s)
+    records = await run_testset(run_id, load_testset(), s, rebuild=rebuild)
     result = summary(records) | {"wall_s": round(time.perf_counter() - started)}
     (RUNS / run_id / "summary.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
     print("\n", result, "\n", s.budget.status())
 
 if __name__ == "__main__":
-    asyncio.run(main(sys.argv[1] if len(sys.argv) > 1 else "baseline"))
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    asyncio.run(main(args[0] if args else "baseline", rebuild="--rebuild" in sys.argv))

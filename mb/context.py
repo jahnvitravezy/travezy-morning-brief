@@ -23,6 +23,14 @@ from mb.sources.routes import GoogleRoutes
 DAY_START = time(8, 0)
 DAY_END = time(22, 0)
 MIN_WINDOW_MIN = 45
+AIRPORT_BEFORE_MIN = 180              # international flight: check-in, bags, the drive
+ANY_TIME_TYPES = {"beach", "park", "natural_feature", "hiking_area", "marina", "plaza"}
+ANY_TIME_WORDS = ("beach", " bay", "viewpoint")
+
+
+def _any_time(info, name: str) -> bool:
+    """A beach or a park has no opening hours; "check its hours" would be noise."""
+    return bool(ANY_TIME_TYPES & set(info.types)) or any(w in f" {name.lower()}" for w in ANY_TIME_WORDS)
 SOURCES = ("geocode", "places", "weather", "routes", "web_search")
 
 
@@ -64,9 +72,15 @@ def free_windows(day: TripDay, prefs: Preferences, min_minutes: int = MIN_WINDOW
     while i < len(acts) and acts[i].kind == "move":
         lo = max(lo, _m(acts[i].end or acts[i].start) + shift)
         i += 1
+    if day.is_arrival:                     # nothing before check-in: they have luggage
+        stay = next((a for a in acts[i:] if a.kind == "stay"), None)
+        if stay:
+            lo = max(lo, _m(stay.end or stay.start))
     j = len(acts) - 1
     while j >= i and acts[j].kind == "move":
         hi = min(hi, _m(acts[j].start))
+        if acts[j].move_mode == "flight":  # be at the airport in time
+            hi = min(hi, _m(acts[j].start) - AIRPORT_BEFORE_MIN)
         j -= 1
     windows, cursor = [], lo
     for a in acts[i:j + 1]:
@@ -136,7 +150,7 @@ async def _lookup_places(day: TripDay, near: str, places: GooglePlaces, run_id: 
             else:
                 flags.append(Flag(code="closed", activity_id=a.id,
                                   message=f"{a.name}: Google lists it as closed at {a.start:%H:%M}"))
-        elif ok is None:
+        elif ok is None and not _any_time(r, a.name):
             flags.append(Flag(code="hours_unknown", activity_id=a.id,
                               message=f"{a.name}: opening hours are not published"))
     status = "live" if "live" in statuses else "cached" if "cached" in statuses else "unavailable"
@@ -168,7 +182,8 @@ async def _travel(day: TripDay, found: dict, routes: GoogleRoutes, run_id: str):
         gap = _m(n.start) - _m(p.end or p.start)
         if minutes > gap:
             flags.append(Flag(code="tight_connection", activity_id=n.id,
-                              message=f"{p.name} to {n.name}: about {minutes} min of travel, {gap} min gap"))
+                              message=f"{p.name} to {n.name}: about {minutes} min of travel but only {gap} min "
+                                      f"between them, so you'd reach {n.name} about {minutes - gap} min late"))
     status = ("live" if "live" in statuses else "cached" if "cached" in statuses
               else "estimated" if statuses else "not_fetched")
     return legs, flags, status

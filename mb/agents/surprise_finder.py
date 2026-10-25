@@ -23,7 +23,7 @@ def finder_input(ctx: Context) -> str:
         "travellers": {"who": p.who, "diet": p.diet.summary, "pace": p.pace.summary,
                        "children": bool(p.party.children_ages), "interests": p.interests, "budget": p.budget},
         "todays_plan": [f"{a.start:%H:%M} {a.name}" for a in ctx.day.activities],
-        "candidates": [{"id": c.id, "name": c.name, "slot": f"{c.window.start:%H:%M}-{c.window.end:%H:%M}",
+        "candidates": [{"id": c.id, "name": c.name, "slot": f"{(c.open_from or c.window.start):%H:%M}-{c.window.end:%H:%M}",
                         "travel_min": c.travel_min, "rating": c.rating, "types": c.types,
                         "source": c.provider, "snippet": c.snippet or None} for c in ctx.candidates],
         "max_picks": MAX_SURPRISES,
@@ -47,7 +47,8 @@ def validate(ctx: Context, picks: SurprisePicks, agent_id: str) -> Surprises:
             dropped.append(f"{c.name}: more than {MAX_SURPRISES} surprises")
             continue
         used_slots.add(slot)
-        items.append(SurpriseItem(name=c.name, why_you=pick.why_you.strip(), fits_slot=slot,
+        shown = f"{c.open_from:%H:%M}-{c.window.end:%H:%M}" if c.open_from else slot   # from when it opens
+        items.append(SurpriseItem(name=c.name, why_you=pick.why_you.strip(), fits_slot=shown,
                                   distance_min=c.travel_min, source_url=c.source_url, place_id=c.place_id))
     none_reason = picks.none_reason if not items else None
     return Surprises(agent_id=agent_id, items=items, none_reason=none_reason, dropped=dropped)

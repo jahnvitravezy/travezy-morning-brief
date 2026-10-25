@@ -38,6 +38,15 @@ allowed_types: [tourist_attraction, museum, art_museum, art_gallery, park, garde
                 hiking_area, marina, plaza]
 allowed_type_suffixes: [_restaurant]
 excluded_types: [lodging, hotel, resort_hotel, private_guest_room, manufacturer, clothing_store,
-                 electronics_store, home_goods_store, gift_shop]
-outdoor_types: [park, beach, natural_feature, hiking_area, campground, garden, zoo, marina]
+                 electronics_store, home_goods_store, gift_shop,
+                 locality, sublocality, political, administrative_area_level_3, administrative_area_level_4]
+# Outdoor: dropped when the window is rainy. Some places only say so in the name.
+outdoor_types: [park, beach, natural_feature, hiking_area, campground, garden, zoo, marina,
+                historical_landmark, monument, plaza, amusement_park, water_park,
+                hindu_temple, buddhist_temple]      # Balinese temples are open courtyards
+outdoor_name_words: [beach, viewpoint, view point, sunset, banyan, terrace, waterfall]
+# Unknown opening hours: only places you can visit any time may still be suggested.
+# A shop or market with no published hours could be shut (a night market at 07:00).
+hours_optional_types: [park, beach, natural_feature, hiking_area, garden, marina, plaza,
+                       historical_landmark, monument, hindu_temple, buddhist_temple, mosque, church]
 adult_types: [bar, night_club, casino, liquor_store]

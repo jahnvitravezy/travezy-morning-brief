@@ -143,3 +143,43 @@ async def test_arrival_day_does_not_use_home_as_anchor():
     ctx = await build_full_context(FileLoader().load("dubai_up01"), 0, StubMeteo(), "dubai_clear_warm",
                                    places=places, routes=StubRoutes(), providers=[PlacesCandidates(places)])
     assert "wake" not in ctx.places          # they wake up in Mumbai
+
+
+async def test_unknown_hours_shops_and_morning_night_markets_are_dropped():
+    nearby = [info("Al Rigga The Night Market", types=("market",), periods=()),
+              info("Spice Shop", types=("market",), periods=()),
+              info("Shri Krishna Temple", types=("hindu_temple",), periods=()),
+              info("OCEAN CAFE", types=("cafe",))]
+    ctx = await _ctx(nearby, "dubai_up03", 2)                  # 21:00 window aside, morning window 07:00-10:00
+    names = {c.name for c in ctx.candidates}
+    assert "Spice Shop" not in names and "Al Rigga The Night Market" not in names
+    assert "Shri Krishna Temple" in names and "Ocean Cafe" in names   # any-time place; caps tidied
+
+
+def test_listicles_are_not_web_candidates():
+    from mb.sources.candidates import _is_article
+    assert _is_article("THE 10 BEST Water & Amusement Parks in Indonesia ...")
+    assert _is_article("Bali in December 2026 – Weather, Festivals, Things to Do & Tips!")
+    assert not _is_article("Ubud Art Market")
+
+
+def test_candidate_names_are_cleaned():
+    from mb.sources.candidates import clean_name
+    assert clean_name("Playa Pacha | Pool and Private Beach Club| FIVE LUXE JBR") == "Playa Pacha"
+    assert clean_name("AquaFun Dubai Water Park - Official") == "AquaFun Dubai Water Park"
+    assert clean_name("OCEAN GRAND BEACH BALI") == "Ocean Grand Beach Bali"
+
+
+async def test_long_free_window_finds_the_first_open_time():
+    """Free day 07:00-23:30: a bar opening at 17:00 is still a candidate."""
+    evening = [OpeningPeriod(day=d, open=dt.time(17), close=dt.time(23)) for d in range(7)]
+    ctx = await _ctx([info("Night Owl Bar", types=("bar",), periods=evening)], "bali_up03", 2)
+    assert "Night Owl Bar" in {c.name for c in ctx.candidates}
+
+
+async def test_surprise_slot_starts_when_the_place_opens():
+    evening = [OpeningPeriod(day=d, open=dt.time(17), close=dt.time(23)) for d in range(7)]
+    ctx = await _ctx([info("Night Owl Bar", types=("bar",), periods=evening)], "bali_up03", 2)
+    c = next(c for c in ctx.candidates if c.name == "Night Owl Bar")
+    s = validate(ctx, SurprisePicks(picks=[SurprisePick(candidate_id=c.id, why_you="x")]), "a2")
+    assert s.items[0].fits_slot.startswith("17:")

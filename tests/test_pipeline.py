@@ -87,7 +87,8 @@ def _cfg_with_timeouts(seconds):
 
 async def test_happy_path_uses_the_composer_words(ctx):
     run = await pipeline.run_brief(ctx, load_config(), FakeLLM(), run_id="t")
-    assert run.brief.notification.body == "Old Dubai, plus 0 ideas" and run.brief.heads_ups == ["One"]
+    assert run.brief.notification.body == "Old Dubai, plus 0 ideas" and run.brief.heads_ups[0] == "One"
+    assert any("Museum of the Future" in h for h in run.brief.heads_ups)   # dropped by the model, added by code
     assert set(run.brief.meta.models) >= {"mb.summariser.v1", "mb.composer.v1"}
     assert run.brief.meta.tokens["mb.summariser.v1"] == 2
 

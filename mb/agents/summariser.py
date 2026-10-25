@@ -2,13 +2,15 @@
 
 Code computes the facts (timeline, travel, spend). The model writes the words
 (notification, heads-ups, weather advice, tip), grounded only in the context.
-Weather clashes are found in code; the model only words them and suggests a swap.
+Weather (line, clashes, swap) and the pace, access, diet and airport checks are computed in code;
+the model only words them, and code adds back any check the model drops.
 """
 from __future__ import annotations
 
 import json
 
-from mb.agents.facts import dry_windows, load_fx, pace_checks, spend, timeline, weather_clashes
+from mb.agents.facts import (access_checks, airport_checks, diet_checks, free_day_weather, load_fx, pace_checks, spend,
+                             suggested_swap, timeline, weather_clashes)
 from mb.config import AgentSpec
 from mb.contracts import Context, Summary, SummaryText
 from mb.llm import LLM, LLMResult, load_prompt
@@ -49,8 +51,9 @@ def brief_input(ctx: Context) -> str:
                            f"{max(h.temp_c for h in ctx.weather.hours):.0f}C" if ctx.weather else None,
         "meals_to_check": [a.name for a in acts if a.kind == "eat"],
         "weather_clashes": weather_clashes(ctx),
-        "dry_windows": dry_windows(ctx),
+        "weather_swap": suggested_swap(ctx) or "none",
         "pace_checks": pace_checks(ctx),
+        "other_checks": access_checks(ctx) + diet_checks(ctx) + airport_checks(ctx) + free_day_weather(ctx),
         "must_mention": must,
         "data_flags": [f.message for f in ctx.flags],
     }, indent=1, ensure_ascii=False)

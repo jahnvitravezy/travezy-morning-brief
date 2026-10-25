@@ -49,7 +49,8 @@ async def test_arrival_day_uses_origin_timezone_and_local_landing(loader, meteo)
     respx.get(GEOCODE_URL).mock(side_effect=_geo)
     ctx = await build_full_context(loader.load("dubai_up01"), 0, meteo, weather_scenario="dubai_clear_warm")
     assert ctx.timezone == "Asia/Kolkata"                 # they wake up in Mumbai
-    assert ctx.free_windows[0].start == dt.time(10, 30)   # 09:00 IST + 3h = 10:30 in Dubai
+    # Lands 10:30 Dubai time (09:00 IST + 3h), but nothing is suggested before the 13:00-13:30 check-in.
+    assert ctx.free_windows[0].start == dt.time(13, 30)
     assert ctx.freshness["weather"] == "fixture"
 
 

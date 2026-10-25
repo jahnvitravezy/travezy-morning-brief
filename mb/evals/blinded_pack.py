@@ -52,21 +52,22 @@ def inputs_html(ctx: Context) -> str:
     p, d = ctx.preferences, ctx.day
     acts = "".join(
         f"<tr><td>{a.start:%H:%M}{'&ndash;' + format(a.end, '%H:%M') if a.end else ''}</td><td>{e(a.name)}"
-        f"{' <b>(booked)</b>' if a.booked else ''}</td><td>{e(a.cost_text)}</td><td>{e(a.note)}</td></tr>"
+        f"{' <b>(booked)</b>' if a.booked else ''}</td><td>{e(a.cost_text) if a.cost_text else 'Not stated'}</td><td>{e(a.note)}</td></tr>"
         for a in d.activities) or "<tr><td colspan=4>Free day: nothing planned</td></tr>"
     hours = ctx.weather.hours if ctx.weather else []
-    wx = " &middot; ".join(f"{h.hour:%H}h {h.temp_c:.0f}&deg;C {h.rain_prob}%" for h in hours[6:23:2]) or "&mdash;"
-    flags = "".join(f"<li>{e(f.message)}</li>" for f in ctx.flags) or "<li>None</li>"
+    wx = " &middot; ".join(f"{h.hour:%H}h {h.temp_c:.0f}&deg;C {h.rain_prob}%"
+                           for h in hours if 6 <= h.hour.hour <= 22 and h.hour.hour % 2 == 0) or "&mdash;"
+    flags = "".join(f"<li>{e(f.message)}</li>" for f in ctx.flags) or "<li>No problems found</li>"
     names = {a.id: a.name for a in d.activities}
     legs = "".join(f"<li>{e(names.get(l.from_id, l.from_id))} &rarr; {e(names.get(l.to_id, l.to_id))}: "
                    f"{l.minutes} min{' (estimated)' if l.source == 'estimated' else ''}</li>"
-                   for l in ctx.legs) or "<li>&mdash;</li>"
+                   for l in ctx.legs) or "<li>No travel between stops today</li>"
     windows = ", ".join(f"{w.start:%H:%M}&ndash;{w.end:%H:%M}" for w in ctx.free_windows) or "none"
     kids = f", children aged {', '.join(map(str, p.party.children_ages))}" if p.party.children_ages else ""
     return f"""
 <div class=inputs><h3>Inputs</h3>
 <p><b>{e(ctx.region)}</b>, {d.date:%a %d %b %Y} &middot; day {d.index + 1}{' (arrival)' if d.is_arrival else ''}{' (departure)' if d.is_departure else ''}
- &middot; wakes up at {e(d.wake_location)} &middot; brief sent {e(ctx.send_at_local)} local</p>
+ &middot; wakes up at {e(d.wake_location)} &middot; brief sent {ctx.send_at_local.strftime('%H:%M') if ctx.send_at_local else '&mdash;'} local</p>
 <p><b>Traveller:</b> {e(p.who)} ({p.party.adults} adult{'s' if p.party.adults != 1 else ''}{kids}) &middot; <b>Diet:</b> {e(p.diet.summary)}
  &middot; <b>Pace:</b> {e(p.pace.summary)} &middot; <b>Budget:</b> {e(p.budget)} &middot; <b>Interests:</b> {e(', '.join(p.interests))}</p>
 <table><tr><th>Time</th><th>Plan</th><th>Cost</th><th>Note</th></tr>{acts}</table>
@@ -79,8 +80,8 @@ def inputs_html(ctx: Context) -> str:
 def brief_html(b: MorningBrief) -> str:
     tl = "".join(f"<li><b>{e(t.time)}</b> {e(t.name)}{' (booked)' if t.booked else ''}"
                  f"{f' &middot; {t.travel_to_next_min} min to next' if t.travel_to_next_min else ''}</li>"
-                 for t in b.timeline) or "<li>&mdash;</li>"
-    hu = "".join(f"<li>{e(h)}</li>" for h in b.heads_ups) or "<li>None</li>"
+                 for t in b.timeline) or "<li>Free day: nothing planned</li>"
+    hu = "".join(f"<li>{e(h)}</li>" for h in b.heads_ups) or "<li>Nothing to flag today</li>"
     sp = "".join(f"<li><b>{e(s.name)}</b> ({e(s.fits_slot)}{f', {s.distance_min} min away' if s.distance_min else ''}): "
                  f"{e(s.why_you)}</li>" for s in b.surprises) or "<li>None today</li>"
     w = b.weather
@@ -90,7 +91,7 @@ def brief_html(b: MorningBrief) -> str:
 <p><b>Timeline</b></p><ul>{tl}</ul>
 <p><b>Weather:</b> {e(w.summary)}{f'<br><b>Clash:</b> {e(w.clash)}' if w.clash else ''}{f'<br><b>Suggested swap:</b> {e(w.suggested_swap)}' if w.suggested_swap else ''}</p>
 <p><b>Heads-ups</b></p><ul>{hu}</ul>
-<p><b>Spend today:</b> {e(b.spend_estimate.local)} ({e(b.spend_estimate.home)})</p>
+<p><b>Spend today:</b> {e(b.spend_estimate.local)}{f' ({e(b.spend_estimate.home)})' if b.spend_estimate.home else ''}</p>
 <p><b>Ideas for you</b></p><ul>{sp}</ul>
 <p><b>Local tip:</b> {e(b.local_tip)}</p>
 </div>"""

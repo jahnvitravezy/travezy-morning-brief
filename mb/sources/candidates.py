@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import hashlib
+import re
 from typing import Protocol
 
 import yaml
@@ -37,7 +38,12 @@ class CandidateRules(BaseModel):
     allowed_type_suffixes: list[str]
     excluded_types: set[str]
     outdoor_types: set[str]
+    outdoor_name_words: list[str]
+    hours_optional_types: set[str]
     adult_types: set[str]
+
+    def outdoor(self, name: str, types: list[str]) -> bool:
+        return bool(self.outdoor_types & set(types)) or any(w in name.lower() for w in self.outdoor_name_words)
 
     def visitable(self, types: list[str]) -> bool:
         t = set(types)
@@ -151,17 +157,38 @@ class PlacesCandidates:
             t_out = travel_minutes((info.lat, info.lon), nxt) if nxt else 0
             if t_in + VISIT_MIN + t_out > length:
                 continue                                 # doesn't fit the window, travel included
-            start, end = _t(_m(w.start) + t_in), _t(_m(w.start) + t_in + VISIT_MIN)
-            if is_open(info, ctx.date, start, end) is False:
+            start, end, open_ = _first_open(info, ctx, _m(w.start) + t_in, _m(w.end) - t_out)
+            if open_ is False:
+                continue                                 # closed for the whole window
+            if open_ is None and not RULES.hours_optional_types & set(info.types):
+                continue                                 # hours unknown and not an any-time place
+            if "night" in info.name.lower() and start < dt.time(17, 0):
                 continue
-            if RULES.outdoor_types & set(info.types) and _rainy(ctx, start, end):
+            if RULES.outdoor(info.name, info.types) and _rainy(ctx, start, end):
                 continue
-            out.append(Candidate(id=f"places:{info.place_id}", provider=self.name, name=info.name, window=w,
+            name = clean_name(info.name)
+            if ctx.region and name.lower() == ctx.region.lower():
+                continue                                 # "Ubud" is a town, not a place to visit
+            out.append(Candidate(id=f"places:{info.place_id}", provider=self.name, name=name, window=w,
                                  place_id=info.place_id,
                                  source_url=f"https://www.google.com/maps/place/?q=place_id:{info.place_id}",
                                  lat=info.lat, lon=info.lon, travel_min=t_in, rating=info.rating,
+                                 open_from=start if _m(start) > _m(w.start) + t_in else None,
                                  types=info.types[:5]))
         return sorted(out, key=lambda c: -(c.rating or 0))[:MAX_PER_WINDOW]
+
+
+def _first_open(info, ctx: Context, earliest: int, latest_end: int):
+    """The first visit time in the window when the place is open (every 30 min). A long free day
+    used to be checked only at its first minute, 07:00, when almost everything is shut."""
+    t, result = earliest, None
+    while t + VISIT_MIN <= latest_end:
+        start, end = _t(t), _t(t + VISIT_MIN)
+        result = is_open(info, ctx.date, start, end)
+        if result is not False:
+            return start, end, result
+        t += 30
+    return _t(earliest), _t(earliest + VISIT_MIN), False
 
 
 class WebCandidates:
@@ -177,7 +204,22 @@ class WebCandidates:
         results, _ = await self.tavily.search(f"{interest} in {ctx.region} {ctx.date:%B %Y}", run_id,
                                               max_results=self.max_results)
         return [Candidate(id="web:" + hashlib.sha256(r.url.encode()).hexdigest()[:10], provider=self.name, name=r.title, window=w,
-                          source_url=r.url, snippet=r.snippet[:200]) for r in results]
+                          source_url=r.url, snippet=r.snippet[:200]) for r in results if not _is_article(r.title)]
+
+
+ARTICLE = re.compile(r"\b(best|top \d+|things to do|guide|must-see|tips|20\d\d)\b|\bpov\b|\|", re.I)
+
+
+def clean_name(name: str) -> str:
+    """'Playa Pacha | Pool and Private Beach Club| FIVE LUXE JBR' -> 'Playa Pacha'; tidy ALL CAPS."""
+    name = re.split(r"\s*\|\s*", name)[0]
+    name = re.sub(r"\s+-\s+Official$", "", name, flags=re.I).strip()
+    return name.title() if name.isupper() else name
+
+
+def _is_article(title: str) -> bool:
+    """'THE 10 BEST Water Parks in Indonesia' is a listicle, not a place someone can go to."""
+    return bool(ARTICLE.search(title))
 
 
 async def gather_candidates(ctx: Context, providers: list[CandidateProvider], run_id: str) -> list[Candidate]:

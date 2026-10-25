@@ -13,9 +13,10 @@ from __future__ import annotations
 
 import json
 
-from mb.agents.facts import spend, timeline
+from mb.agents.facts import (_covers, ensure_covered, spend, suggested_swap, timeline, weather_clashes,
+                             weather_summary)
 from mb.config import AgentSpec
-from mb.contracts import (ComposerText, Context, MorningBrief, Notification, Summary, Surprises,
+from mb.contracts import (ComposerText, Context, MorningBrief, Notification, Spend, Summary, Surprises,
                           Weather)
 from mb.llm import LLM, LLMResult, load_prompt
 
@@ -28,26 +29,54 @@ def _window_slots(ctx: Context) -> set[str]:
     return {f"{w.start:%H:%M}-{w.end:%H:%M}" for w in ctx.free_windows}
 
 
+def _inside(slot: str, ctx: Context) -> bool:
+    """The surprise's slot lies inside one of the day's free windows."""
+    try:
+        s, e = slot.split("-")
+    except ValueError:
+        return False
+    return any(f"{w.start:%H:%M}" <= s < e <= f"{w.end:%H:%M}" for w in ctx.free_windows)
+
+
 def merge(ctx: Context, summary: Summary, surprises: Surprises | None,
           text: ComposerText | None = None) -> MorningBrief:
     """The code-only merge. With `text`, the Composer model's words replace the Summariser's."""
     s = summary.text
     planned = {a.name.lower() for a in ctx.day.activities} | {n.lower() for n in ctx.other_days}
-    slots = _window_slots(ctx)
     items = [i for i in (surprises.items if surprises else [])
-             if i.name.lower() not in planned and i.fits_slot in slots]     # no repeats, no clashes
-    actions = (["add_to_day"] if items else []) + (["swap"] if items or s.suggested_swap else []) + ["ask"]
+             if i.name.lower() not in planned and _inside(i.fits_slot, ctx)]  # no repeats, no clashes
+    swap = suggested_swap(ctx)                                              # code picks the time
+    clashes = weather_clashes(ctx)
+    actions = (["add_to_day"] if items else []) + (["swap"] if items or swap else []) + ["ask"]
+    heads = [h for h in (text.heads_ups if text else s.heads_ups) if not _names_any(h, items)]
+    tip = next((t for t in ((text.local_tip if text else None), s.local_tip)
+                if t and not _names_any(t, items) and not (swap and _same_advice(t, swap))), "")
     return MorningBrief(
         brief_id=brief_id(ctx), trip_id=ctx.trip_id, date=ctx.date,
         send_at_local=f"{ctx.send_at_local:%H:%M}" if ctx.send_at_local else "",
         timezone=ctx.timezone or "",
         notification=Notification(title=(text or s).notification_title, body=(text or s).notification_body),
         timeline=summary.timeline,
-        weather=Weather(summary=s.weather_summary, clash=s.weather_clash, suggested_swap=s.suggested_swap),
-        heads_ups=(text.heads_ups if text else s.heads_ups),
-        spend_estimate=summary.spend, surprises=items,
-        local_tip=(text.local_tip if text and text.local_tip else s.local_tip),
-        actions=actions)
+        weather=Weather(summary=weather_summary(ctx), clash=clashes[0] if clashes else None, suggested_swap=swap),
+        heads_ups=ensure_covered(heads, ctx),
+        spend_estimate=_spend_text(summary.spend), surprises=items,
+        local_tip=tip, actions=actions)
+
+
+def _names_any(line: str, items) -> bool:
+    """Does the line talk about one of the surprises? Those belong in the surprises section only."""
+    return any(_covers(line, [w for w in i.name.lower().split() if len(w) >= 4] or [i.name.lower()], [])
+               for i in items)
+
+
+def _same_advice(tip: str, swap: str) -> bool:
+    """A tip that just repeats the weather swap ("move X to 08:00") adds nothing."""
+    times = {w for w in swap.replace("-", " ").split() if ":" in w}
+    return bool(times & set(tip.replace("-", " ").split())) or tip.lower().startswith(("move ", "consider moving"))
+
+
+def _spend_text(sp: Spend) -> Spend:
+    return sp if sp.local else Spend(local="Nothing to pay for in today's plan", home="")
 
 
 def composer_input(brief: MorningBrief, fix_reasons: list[str] | None) -> str:
@@ -73,14 +102,13 @@ async def run_composer(ctx: Context, summary: Summary, surprises: Surprises | No
 
 def safe_version(ctx: Context, reason: str) -> MorningBrief:
     """Fallback: the day's plan only, no surprises, no badge. Code only, so it cannot fail."""
-    must = [f"{a.name}: {'pickup' if 'pickup' in a.note.lower() else 'timed entry'} at {a.timed_at:%H:%M}"
-            for a in ctx.day.activities if a.timed_at]
     title = f"Day {ctx.day.index + 1} in {ctx.region}" if ctx.region else f"Day {ctx.day.index + 1}"
     brief = MorningBrief(
         brief_id=brief_id(ctx), trip_id=ctx.trip_id, date=ctx.date,
         send_at_local=f"{ctx.send_at_local:%H:%M}" if ctx.send_at_local else "", timezone=ctx.timezone or "",
         notification=Notification(title=title[:40], body="Your plan for today"),
-        timeline=timeline(ctx), heads_ups=must[:4], spend_estimate=spend(ctx, _fx()), actions=["ask"])
+        timeline=timeline(ctx), heads_ups=ensure_covered([], ctx), weather=Weather(summary=weather_summary(ctx)),
+        spend_estimate=_spend_text(spend(ctx, _fx())), actions=["ask"])
     brief.confidence.flags.append(f"safe_version: {reason}")
     brief.meta.judge_verdict = "fallback"
     return brief

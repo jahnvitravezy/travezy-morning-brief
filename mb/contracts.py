@@ -170,6 +170,7 @@ class Candidate(Contract):
     lat: float | None = None
     lon: float | None = None
     travel_min: int | None = None      # from the previous stop (estimated); None if location unknown
+    open_from: dt.time | None = None   # first time in the window it is open (long free days)
     rating: float | None = None
     types: list[str] = []
     snippet: str = ""
@@ -271,13 +272,11 @@ class SummaryText(Contract):
     meal_checks: list[MealCheck] = []  # one verdict per meal, filled before anything else
     conflicts: list[str] = []          # filled FIRST: each plan item that clashes with the travellers
     notification_title: str
-    """The parts of out.summary the model writes. Facts (timeline, spend) are computed in code."""
-    notification_title: str
     notification_body: str
     heads_ups: list[str] = []
-    weather_summary: str
-    weather_clash: str | None = None
-    suggested_swap: str | None = None
+    weather_summary: str = ""          # since summariser-v6 written in code; kept for older prompts
+    weather_clash: str | None = None   # since v6 found and worded in code
+    suggested_swap: str | None = None  # since v6 chosen in code (a free, dry slot) or none
     local_tip: str
 
 class Summary(Contract):
