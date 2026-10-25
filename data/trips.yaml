@@ -1,4 +1,11 @@
+# A trip = one itinerary + the answers to its planning questions (preferences belong to the trip).
 - { trip_id: dubai_up01, itinerary: dubai_4d.json, preferences: up.01 }
 - { trip_id: dubai_up02, itinerary: dubai_4d.json, preferences: up.02 }
+- { trip_id: dubai_up03, itinerary: dubai_4d.json, preferences: up.03 }
+- { trip_id: dubai_up04, itinerary: dubai_4d.json, preferences: up.04 }
+- { trip_id: dubai_up05, itinerary: dubai_4d.json, preferences: up.05 }
+- { trip_id: bali_up01,  itinerary: bali_5d.json,  preferences: up.01 }
+- { trip_id: bali_up02,  itinerary: bali_5d.json,  preferences: up.02 }
+- { trip_id: bali_up03,  itinerary: bali_5d.json,  preferences: up.03 }
 - { trip_id: bali_up04,  itinerary: bali_5d.json,  preferences: up.04 }
 - { trip_id: bali_up05,  itinerary: bali_5d.json,  preferences: up.05 }

@@ -14,37 +14,17 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from mb.budget import Budget, BudgetExceeded
-from mb.config import load_config
+from mb.budget import BudgetExceeded
 from mb.context import build_full_context
 from mb.contracts import MorningBrief
-from mb.llm import LLM
 from mb.pipeline import run_brief
-from mb.sources.candidates import PlacesCandidates, WebCandidates
-from mb.sources.itinerary import get_loader
-from mb.sources.openmeteo import OpenMeteo
-from mb.sources.places import GooglePlaces
-from mb.sources.routes import GoogleRoutes
-from mb.sources.tavily import Tavily
+from mb.services import Services
 
 
 class BriefRequest(BaseModel):
     trip_id: str
     date: dt.date
     weather_scenario: str | None = None   # stored scenario for test days beyond the forecast range
-
-
-class Services:
-    """Built once at startup: config is validated here, so a bad config stops the service."""
-    def __init__(self):
-        self.cfg = load_config()
-        self.budget = Budget.from_config(self.cfg)
-        self.loader = get_loader(self.cfg)
-        self.meteo = OpenMeteo()
-        self.places = GooglePlaces(self.budget)
-        self.routes = GoogleRoutes(self.budget)
-        self.providers = [PlacesCandidates(self.places), WebCandidates(Tavily(self.budget))]
-        self.llm = LLM(self.budget)
 
 
 @asynccontextmanager

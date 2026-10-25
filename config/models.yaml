@@ -1,5 +1,9 @@
 # Allowlist of models any agent or judge may use. family is used to test judge self-preference.
-openai/gpt-4o:       { family: openai }
-openai/gpt-4o-mini:  { family: openai }
-openai/gpt-4.1-mini: { family: openai }
-# Anthropic and Google entries are added on Wednesday, with exact IDs from their docs.
+# Exact versions only (no "-latest" aliases), so a comparison can't change underneath us.
+openai/gpt-4o:                  { family: openai }      # production baseline
+openai/gpt-4o-mini:             { family: openai }      # judge starting point (the brief's)
+openai/gpt-4.1-mini:            { family: openai }
+anthropic/claude-sonnet-5-5:    { family: anthropic }
+anthropic/claude-haiku-5-5:     { family: anthropic }
+gemini/gemini-3.8-flash:        { family: google }
+gemini/gemini-3.5-flash-lite:   { family: google }

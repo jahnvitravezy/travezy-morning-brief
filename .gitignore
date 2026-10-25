@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 data/cache/
 data/usage/
-data/usage/
 *.txt
 !requirements.txt
+data/contexts/
+data/runs/

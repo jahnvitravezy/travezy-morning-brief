@@ -120,3 +120,26 @@ async def test_studios_and_hotels_are_not_surprises():
               info("Photo View Point", types=("tourist_attraction",))]
     names = {c.name for c in (await _ctx(nearby)).candidates}
     assert names == {"Photo View Point"}
+
+
+async def test_free_day_is_anchored_at_the_hotel():
+    """Free day, no stops: candidates are searched around where they wake up."""
+    seen = []
+
+    class Spy(StubPlaces):
+        async def search_near(self, query, lat, lon, run_id, radius_m=1500, n=5):
+            seen.append(query)
+            return self.nearby
+
+    places = Spy([info("Warung Sopa", lat=-8.69, lon=115.17)])
+    ctx = await build_full_context(FileLoader().load("bali_up01"), 2, StubMeteo(), "bali_clear",
+                                   places=places, routes=StubRoutes(), providers=[PlacesCandidates(places)])
+    assert "wake" in ctx.places
+    assert seen and all("The Haven Bali Seminyak" in q for q in seen)
+
+
+async def test_arrival_day_does_not_use_home_as_anchor():
+    places = StubPlaces([])
+    ctx = await build_full_context(FileLoader().load("dubai_up01"), 0, StubMeteo(), "dubai_clear_warm",
+                                   places=places, routes=StubRoutes(), providers=[PlacesCandidates(places)])
+    assert "wake" not in ctx.places          # they wake up in Mumbai

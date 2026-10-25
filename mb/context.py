@@ -215,6 +215,13 @@ async def build_full_context(trip: Trip, index: int, meteo: OpenMeteo,
     found, legs, flags = {}, [], []
     if places:
         found, flags, fresh["places"] = await _lookup_places(day, trip.destination or "", places, run_id)
+        if day.wake_location not in ("unknown", trip.origin):   # their hotel: anchor for early windows
+            try:
+                wake = await places.lookup(f"{day.wake_location}, {trip.region or trip.destination or ''}", run_id)
+            except httpx.HTTPError:
+                wake = None
+            if wake:
+                found["wake"] = wake
     if routes and found:
         legs, more, fresh["routes"] = await _travel(day, found, routes, run_id)
         flags += more

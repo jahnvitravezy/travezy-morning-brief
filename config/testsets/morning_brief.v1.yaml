@@ -1,0 +1,28 @@
+# Test set for the Morning Brief: fixed trip days, used on every run so results are comparable.
+# covers: which required case each day exercises (checked by tests/test_testset.py).
+# Weather comes from stored scenarios: trip dates are beyond the 16-day forecast range.
+id: testset.morning_brief.v1
+use_case: morning_brief
+days:
+  - { id: td.01, trip_id: dubai_up01, date: 2026-11-20, weather: dubai_clear_warm,  covers: [arrival, diet] }
+  - { id: td.02, trip_id: dubai_up01, date: 2026-11-21, weather: dubai_clear_warm,  covers: [sightseeing, booking, diet] }
+  - { id: td.03, trip_id: dubai_up02, date: 2026-11-21, weather: dubai_clear_warm,  covers: [sightseeing, booking, family, diet] }
+  - { id: td.04, trip_id: dubai_up03, date: 2026-11-22, weather: dubai_clear_warm,  covers: [sightseeing, booking] }
+  - { id: td.05, trip_id: dubai_up04, date: 2026-11-22, weather: dubai_clear_warm,  covers: [sightseeing, booking, pace] }
+  - { id: td.06, trip_id: dubai_up05, date: 2026-11-23, weather: dubai_hot_midday,  covers: [departure, weather_clash, diet] }
+  - { id: td.07, trip_id: dubai_up02, date: 2026-11-23, weather: dubai_hot_midday,  covers: [departure, weather_clash, family, no_surprise] }
+  - { id: td.08, trip_id: dubai_up01, date: 2026-11-22, weather: dubai_clear_warm,  covers: [sightseeing, booking, diet] }
+  - { id: td.09, trip_id: dubai_up04, date: 2026-11-20, weather: dubai_clear_warm,  covers: [arrival, pace] }
+  - { id: td.10, trip_id: dubai_up03, date: 2026-11-21, weather: dubai_clear_warm,  covers: [sightseeing, booking] }
+  - { id: td.11, trip_id: bali_up04,  date: 2026-12-10, weather: bali_clear,        covers: [arrival, pace] }
+  - { id: td.12, trip_id: bali_up04,  date: 2026-12-11, weather: bali_rain_afternoon, covers: [sightseeing, weather_clash, closure, pace] }
+  - { id: td.13, trip_id: bali_up04,  date: 2026-12-12, weather: bali_clear,        covers: [free_day, pace] }
+  - { id: td.14, trip_id: bali_up04,  date: 2026-12-13, weather: bali_rain_all_day, covers: [sightseeing, booking, weather_clash, pace, no_surprise] }
+  - { id: td.15, trip_id: bali_up05,  date: 2026-12-11, weather: bali_clear,        covers: [sightseeing, closure, diet] }
+  - { id: td.16, trip_id: bali_up05,  date: 2026-12-12, weather: bali_rain_afternoon, covers: [free_day, weather_clash] }
+  - { id: td.17, trip_id: bali_up02,  date: 2026-12-11, weather: bali_rain_afternoon, covers: [sightseeing, weather_clash, closure, family, diet] }
+  - { id: td.18, trip_id: bali_up02,  date: 2026-12-13, weather: bali_clear,        covers: [sightseeing, booking, family] }
+  - { id: td.19, trip_id: bali_up03,  date: 2026-12-13, weather: bali_clear,        covers: [sightseeing, booking] }
+  - { id: td.20, trip_id: bali_up01,  date: 2026-12-14, weather: bali_clear,        covers: [departure, diet] }
+  - { id: td.21, trip_id: bali_up03,  date: 2026-12-12, weather: bali_clear,        covers: [free_day] }
+  - { id: td.22, trip_id: bali_up01,  date: 2026-12-11, weather: bali_rain_afternoon, covers: [sightseeing, weather_clash, closure, pace, diet] }

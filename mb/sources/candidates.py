@@ -96,6 +96,19 @@ def _coords(ctx: Context, a: Activity | None) -> tuple[float, float] | None:
     return (info.lat, info.lon) if info and info.lat is not None else None
 
 
+def here_for(ctx: Context, before: Activity | None, after: Activity | None):
+    """Where the traveller is at the start of a window: the stop before it; else their hotel
+    (not on arrival day, when they wake up at home); else the next stop. Returns (name, coords)."""
+    if before and _coords(ctx, before):
+        return before.name, _coords(ctx, before)
+    wake = ctx.places.get("wake")
+    if wake and wake.lat is not None and not ctx.day.is_arrival:
+        return ctx.day.wake_location, (wake.lat, wake.lon)
+    if after and _coords(ctx, after):
+        return after.name, _coords(ctx, after)
+    return None, None
+
+
 class CandidateProvider(Protocol):
     name: str
 
@@ -110,17 +123,18 @@ class PlacesCandidates:
 
     async def candidates(self, ctx: Context, w: Window, run_id: str) -> list[Candidate]:
         before, after = anchors(ctx, w)
-        here, nxt = _coords(ctx, before), _coords(ctx, after)
+        here_name, here = here_for(ctx, before, after)
+        nxt = _coords(ctx, after)
         if not here:
             return []                                    # we don't know where they are: suggest nothing
         # Search near where they are; if the next stop is far, also near the next stop
         # (spend the free time close to where they need to be next).
-        centers = [(before, here)]
+        centers = [(here_name, here)]
         if after and nxt and haversine_km(here, nxt) > WALK_MAX_KM:
-            centers.append((after, nxt))
+            centers.append((after.name, nxt))
         found = await asyncio.gather(*(
-            self.places.search_near(f"{q} near {stop.name}, {ctx.region or ''}", pt[0], pt[1], run_id)
-            for stop, pt in centers for q in queries_for(ctx)))
+            self.places.search_near(f"{q} near {name}, {ctx.region or ''}", pt[0], pt[1], run_id)
+            for name, pt in centers for q in queries_for(ctx)))
         planned = {a.name.lower() for a in ctx.day.activities} | {n.lower() for n in ctx.other_days}
         length, seen, out = _m(w.end) - _m(w.start), set(), []
         for info in (p for group in found for p in group):
