@@ -115,8 +115,7 @@ def pack_html(items: list[tuple[str, Context, MorningBrief]]) -> str:
     return f"""<!doctype html><html><head><meta charset=utf-8><title>Morning Brief scoring pack</title>
 <style>{CSS}</style></head><body><h1>Morning Brief: blinded scoring pack</h1>
 <p>{len(items)} briefs. Each shows the inputs the system had (left) and the brief it wrote (right).
-Score each brief in <b>scoring_sheet.xlsx</b> against its inputs only. Please score on your own,
-without discussing briefs first, so we can measure agreement honestly.</p><ul style='list-style:none;padding:0'>{scale}</ul>{cards}</body></html>"""
+Score each brief in <b>scoring_sheet.xlsx</b> against its inputs only.</p><ul style='list-style:none;padding:0'>{scale}</ul>{cards}</body></html>"""
 
 
 # ---------- scoring sheet ----------
