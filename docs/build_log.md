@@ -80,3 +80,21 @@ Fixes:
 - **Preflight:** before any run or judge run, one tiny call to every model it uses. If one can't answer, the run doesn't start.
 - Runs record `agent_failures`; the scorecard marks a run or judge **valid: NO** if anything fell back or failed.
 The invalid runs are kept and shown as invalid, not deleted. Tests: 138.
+
+## 27 Oct: Valid comparisons, and three judges that disagree
+Preflight stopped all three Sonnet runs before they started: Sonnet 5.5 also rejects forced tool calls, which is how Instructor gets structured output by default. Sonnet now uses Instructor's JSON mode (`structured: json` in models.yaml).
+Valid agent results (same 22 contexts, same judge gpt-4o-mini, first score before any fix; GPT-4o baseline 88.2 in judged-v2):
+| role | GPT-4.1 mini | Claude Haiku 5.5 |
+|---|---|---|
+| summariser | 86.1 | 86.3 |
+| surprise finder | 87.7 | 86.3 |
+| composer | 85.9 | 86.5, but **14 of 22 fell back**: its notification body ran over 90 characters (100-115), the fix didn't shorten it, so the rule check sent the safe version |
+The rule checks and fallback did their job: no traveller would have seen an over-long notification.
+Judges on the same 22 pack briefs, 3 repeats each:
+| judge | avg | spread between repeats | same badge | red |
+|---|---|---|---|---|
+| gpt-4o-mini | 87.7 | 1.2 | 100% | 0 |
+| gpt-4.1-mini | 99.0 | 1.6 | 100% | 0 |
+| claude-haiku-5-5 | 66.1 | 3.7 | 77% | 17 |
+They disagree by 33 points on the same briefs. gpt-4.1-mini passes almost everything; Haiku is strict, less consistent, and partly right (it caught a tip that invented a "Coffee Museum" and heads-ups that state a time without saying what to do) and partly wrong (it called the code-computed spend "unsupported"). Both OpenAI judges score briefs written by OpenAI models higher, which may be self-preference or leniency; the team's blind scores will tell which judge is closer to people.
+Also: spend and timeline added to the judge's `facts_from_code`; "cash only" added to what the brief must report (Haiku's Composer dropped it once). Tests: 140.

@@ -164,3 +164,26 @@ async def test_llm_leaves_out_temperature_for_models_that_reject_it():
     for m in ("anthropic/claude-haiku-5-5", "openai/gpt-4o"):
         await llm.call(model=m, system="s", user="u", response_model=_Ok, run_id="t", agent_id="a")
     assert seen == {"anthropic/claude-haiku-5-5": False, "openai/gpt-4o": True}
+
+
+async def test_sonnet_uses_the_json_client_not_forced_tools():
+    from types import SimpleNamespace
+    from mb.config import load_config
+    from mb.llm import LLM, _Ok
+    used = []
+
+    class Budget:
+        def check(self, est): pass
+        def record(self, **kw): pass
+
+    def client(name):
+        async def create(**kw):
+            used.append(name)
+            return _Ok(ok=True), SimpleNamespace(usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1))
+        return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create_with_completion=create)))
+
+    llm = LLM(Budget(), load_config().models)
+    llm.client, llm.json_client = client("tools"), client("json")
+    for m in ("anthropic/claude-sonnet-5-5", "anthropic/claude-haiku-5-5"):
+        await llm.call(model=m, system="s", user="u", response_model=_Ok, run_id="t", agent_id="a")
+    assert used == ["json", "tools"]

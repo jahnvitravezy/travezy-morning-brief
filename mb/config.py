@@ -29,6 +29,7 @@ class AppSettings(Strict):
 class ModelSpec(Strict):
     family: Literal["openai", "anthropic", "google"]
     temperature: bool = True     # False: the model only runs at its own default (Claude 5.5 models)
+    structured: Literal["tools", "json"] = "tools"   # json: no forced tool call (Claude Sonnet 5.5)
 
 
 class SourceSpec(Strict):

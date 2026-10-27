@@ -35,6 +35,8 @@ def judge_input(ctx: Context, brief: MorningBrief, rubric: Rubric) -> str:
         "facts_from_code": {
             "weather_line": weather_summary(ctx), "weather_clashes": weather_clashes(ctx),
             "weather_swap": suggested_swap(ctx), "must_be_reported": [line for _, _, line in must_cover(ctx)],
+            "spend_estimate": "computed in code from the plan's costs, per person, flights and hotels excluded",
+            "timeline": "copied from the plan by code",
         },
         "brief": shown,
     }, indent=1, ensure_ascii=False, default=str)

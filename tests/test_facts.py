@@ -96,3 +96,9 @@ def test_rain_on_a_free_day_becomes_a_heads_up():
     c = ctx_for("bali_up05", 2, rain=(14, 15, 16))
     assert free_day_weather(c) == ["Rain likely 14:00-17:00: keep that time for something indoors"]
     assert any("Rain likely" in h for h in ensure_covered([], c))
+
+
+def test_cash_only_must_be_mentioned():
+    c = build_context(L.load("dubai_up02"), 1)
+    assert any("cash" in h.lower() for h in ensure_covered([], c))
+    assert sum("cash" in h.lower() for h in ensure_covered(["Carry AED 1 cash each for the abra."], c)) == 1

@@ -3,7 +3,7 @@
 openai/gpt-4o:                  { family: openai }      # production baseline
 openai/gpt-4o-mini:             { family: openai }      # judge starting point (the brief's)
 openai/gpt-4.1-mini:            { family: openai }
-anthropic/claude-sonnet-5-5:    { family: anthropic, temperature: false }   # rejects temperature=0
+anthropic/claude-sonnet-5-5:    { family: anthropic, temperature: false, structured: json }   # rejects temperature=0 and forced tool use
 anthropic/claude-haiku-5-5:     { family: anthropic, temperature: false }
 gemini/gemini-3.8-flash:        { family: google }
 gemini/gemini-3.5-flash-lite:   { family: google }

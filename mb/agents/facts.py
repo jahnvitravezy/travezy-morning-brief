@@ -271,6 +271,9 @@ def must_cover(ctx: Context) -> list[tuple[list[str], list[str], str]]:
     out += [(["airport"], ["leave", "by"], line) for line in airport_checks(ctx)]
     out += [(["rain"], ["indoor", "inside", "spa", "shopping", "umbrella"], line) for line in free_day_weather(ctx)]
     for a in ctx.day.activities:
+        if "cash" in a.note.lower():
+            short = [w for w in a.name.lower().split() if len(w) >= 4 and w not in region] or name_words(a.name)
+            out.append((short, ["cash"], f"{a.name}: cash only" + (f" ({a.cost_text})" if a.cost_text else "")))
         if a.timed_at:
             out.append((name_words(a.name), [f"{a.timed_at:%H:%M}", f"{a.timed_at.hour}:"],
                         f"{a.name}: {'pickup' if 'pickup' in a.note.lower() else 'timed entry'} at {a.timed_at:%H:%M}"))
