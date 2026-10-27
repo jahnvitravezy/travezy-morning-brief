@@ -45,16 +45,19 @@ def load_prompt(version: str) -> str:
 
 
 class LLM:
-    def __init__(self, budget: Budget):
+    def __init__(self, budget: Budget, models: dict | None = None):
         self.budget = budget
+        self.models = models or {}   # models.yaml: which models accept a temperature
         self.client = instructor.from_litellm(litellm.acompletion)
 
     async def call(self, *, model: str, system: str, user: str, response_model: type[T], run_id: str,
                    agent_id: str, temperature: float = 0.0, timeout_s: float = 30.0) -> LLMResult[T]:
         self.budget.check(EST_CALL_USD)
         start = time.perf_counter()
+        spec = self.models.get(model)
+        extra = {"temperature": temperature} if spec is None or spec.temperature else {}
         out, raw = await self.client.chat.completions.create_with_completion(
-            model=model, response_model=response_model, temperature=temperature,
+            model=model, response_model=response_model, **extra,
             timeout=timeout_s, max_retries=1,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}])
         latency = int((time.perf_counter() - start) * 1000)
@@ -66,3 +69,20 @@ class LLM:
         self.budget.record(run_id=run_id, kind="llm", item=f"{agent_id}:{model}", cost_usd=cost,
                            units={"in": u.prompt_tokens, "out": u.completion_tokens})
         return LLMResult(out, model, u.prompt_tokens, u.completion_tokens, cost, latency)
+
+class _Ok(BaseModel):
+    ok: bool
+
+
+async def preflight(llm: LLM, models: set[str], run_id: str = "preflight") -> dict[str, str]:
+    """One tiny call per model before a run. Returns {model: problem} for any that can't answer,
+    so a run with a broken model (no key, no quota, an unsupported setting) stops in seconds
+    instead of quietly degrading every brief and producing numbers that mean nothing."""
+    problems = {}
+    for m in sorted(models):
+        try:
+            await llm.call(model=m, system="Reply with ok=true.", user="ok?", response_model=_Ok,
+                           run_id=run_id, agent_id="preflight", timeout_s=20)
+        except Exception as e:
+            problems[m] = f"{type(e).__name__}: {str(e).splitlines()[0][:160]}"
+    return problems

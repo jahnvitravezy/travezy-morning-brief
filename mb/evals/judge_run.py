@@ -19,6 +19,7 @@ from mb.contracts import Context, MorningBrief
 from mb.evals.runner import CONTEXTS, RUNS, context_index
 from mb.evals.testset import load_testset
 from mb.judge.judge import judge_brief
+from mb.llm import preflight
 from mb.pipeline import agent_for
 from mb.services import Services
 
@@ -34,9 +35,11 @@ def with_judge_model(cfg: Config, model: str) -> Config:
 
 
 async def judge_run(run_id: str, s: Services, model: str | None = None, repeat: int = 1,
-                    concurrency: int = 4) -> list[dict]:
+                    concurrency: int = 4, check: bool = True) -> list[dict]:
     cfg = with_judge_model(s.cfg, model) if model else s.cfg
     a4 = agent_for(cfg, "out.verdict")
+    if check and (problems := await preflight(s.llm, {a4.model})):
+        raise SystemExit(f"PREFLIGHT FAILED  {a4.model}: {problems[a4.model]}\nNot judging: every judgement would fail.")
     rubric = cfg.rubrics[a4.rubric]
     testset = load_testset()
     index = json.loads(context_index(testset).read_text(encoding="utf-8"))
@@ -63,6 +66,9 @@ async def judge_run(run_id: str, s: Services, model: str | None = None, repeat: 
         for r in records:
             f.write(json.dumps(r) + "\n")
     scored = [r["score"] for r in records if r["score"] is not None]
+    errors = sum(r["score"] is None for r in records)
+    if errors:
+        print(f"\nWARNING: {errors} of {len(records)} judgements failed; see 'error' in the file.")
     print(f"\n{len(records)} judgements -> {path}\navg score {sum(scored) / max(len(scored), 1):.1f}, "
           f"cost ${sum(r['cost_usd'] for r in records):.4f}\n{s.budget.status()}")
     return records

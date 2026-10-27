@@ -23,6 +23,7 @@ from mb.context import build_full_context
 from mb.contracts import Context
 from mb.evals.testset import TestDay, TestSet, load_testset
 from mb.judge.rules import run_rule_checks
+from mb.llm import preflight
 from mb.pipeline import run_brief
 from mb.services import Services
 
@@ -78,6 +79,7 @@ async def run_testset(run_id: str, testset: TestSet, s: Services, cfg=None, conc
                    "latency_ms": run.brief.meta.latency_ms, "tokens": run.brief.meta.tokens,
                    "cost_usd": round(run.cost_usd, 5), "surprises": len(run.brief.surprises),
                    "fallback": run.brief.meta.judge_verdict == "fallback", "rule_failures": failures,
+                   "agent_failures": [e for e in run.events if "failed" in e and "attempt" not in e],
                    "verdict": run.brief.meta.judge_verdict, "score": run.brief.confidence.score,
                    "badge": run.brief.confidence.badge,
                    "first_score": run.verdicts[0].score if run.verdicts else None,
@@ -105,6 +107,7 @@ def summary(records: list[dict]) -> dict:
     n = len(records)
     scored = [r["score"] for r in records if r.get("score") is not None]
     return {"days": n, "fallbacks": sum(r["fallback"] for r in records),
+            "agent_failures": sum(len(r.get("agent_failures", [])) for r in records),
             "verdicts": {v: sum(r.get("verdict") == v for r in records) for v in ("pass", "fix", "fallback")},
             "badges": {b: sum(r.get("badge") == b for r in records) for b in ("green", "amber", "red")},
             "avg_score": round(sum(scored) / len(scored), 1) if scored else None,
@@ -135,6 +138,12 @@ def with_models(cfg, overrides: dict[str, str]):
 async def main(run_id: str, rebuild: bool = False, overrides: dict[str, str] | None = None):
     s = Services()
     cfg = with_models(s.cfg, overrides or {})
+    problems = await preflight(s.llm, {a.model for a in cfg.agents.values()})
+    if problems:
+        for m, p in problems.items():
+            print(f"PREFLIGHT FAILED  {m}: {p}")
+        print(f"Run '{run_id}' not started: every brief would silently fall back, and the numbers would mean nothing.")
+        sys.exit(1)
     started = time.perf_counter()
     records = await run_testset(run_id, load_testset(), s, cfg=cfg, rebuild=rebuild)
     result = summary(records) | {"wall_s": round(time.perf_counter() - started),

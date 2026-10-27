@@ -28,6 +28,7 @@ class AppSettings(Strict):
 
 class ModelSpec(Strict):
     family: Literal["openai", "anthropic", "google"]
+    temperature: bool = True     # False: the model only runs at its own default (Claude 5.5 models)
 
 
 class SourceSpec(Strict):

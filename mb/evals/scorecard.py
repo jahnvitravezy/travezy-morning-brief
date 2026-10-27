@@ -36,7 +36,10 @@ def agent_rows(runs_dir: Path = RUNS) -> list[dict]:
         if not models:                                   # older runs: read the models off the records
             for r in recs:
                 models |= {k.split(".")[1]: v for k, v in r["models"].items()}
-        rows.append({"run": d.name, **{r: models.get(r, "") for r in ROLES},
+        failures = sum(len(r.get("agent_failures", [])) for r in recs) or sum(
+            1 for r in recs for e in r["events"] if "failed" in e and "attempt" not in e)
+        rows.append({"run": d.name, "valid": "yes" if failures == 0 else f"NO ({failures} agent failures)",
+                     **{r: models.get(r, "") for r in ROLES},
                      "first_score": s.get("avg_first_score"), "final_score": s.get("avg_score"),
                      "green": s["badges"]["green"], "amber": s["badges"]["amber"], "red": s["badges"]["red"],
                      "fixes": s["verdicts"]["fix"], "fallbacks": s["fallbacks"],
@@ -48,21 +51,25 @@ def agent_rows(runs_dir: Path = RUNS) -> list[dict]:
 def judge_rows(runs_dir: Path = RUNS) -> list[dict]:
     rows = []
     for f in sorted(runs_dir.glob("*/judged/*.jsonl")):
-        recs = [r for r in _jsonl(f) if r["score"] is not None]
+        all_recs = _jsonl(f)
+        recs = [r for r in all_recs if r["score"] is not None]
         if not recs:
+            rows.append({"briefs": f.parent.parent.name, "judge": all_recs[0]["judge_model"] if all_recs else f.stem,
+                         "valid": f"NO (all {len(all_recs)} failed)"})
             continue
         by_day = defaultdict(list)
         for r in recs:
             by_day[r["day_id"]].append(r)
         spreads = [max(x["score"] for x in v) - min(x["score"] for x in v) for v in by_day.values() if len(v) > 1]
         same_badge = [len({x["badge"] for x in v}) == 1 for v in by_day.values() if len(v) > 1]
+        errs = len(all_recs) - len(recs)
         rows.append({"briefs": f.parent.parent.name, "judge": recs[0]["judge_model"],
+                     "valid": "yes" if errs == 0 else f"NO ({errs} of {len(all_recs)} failed)",
                      "repeats": max(r["repeat"] for r in recs), "avg_score": round(st.mean(r["score"] for r in recs), 1),
                      "avg_spread": round(st.mean(spreads), 1) if spreads else None,
                      "max_spread": max(spreads) if spreads else None,
                      "same_badge": f"{sum(same_badge) / len(same_badge):.0%}" if same_badge else None,
                      "green": sum(r["badge"] == "green" for r in recs), "red": sum(r["badge"] == "red" for r in recs),
-                     "errors": sum(1 for r in _jsonl(f) if r["score"] is None),
                      "cost_per_judgement": round(st.mean(r["cost_usd"] for r in recs), 5)})
     return rows
 
@@ -70,20 +77,22 @@ def judge_rows(runs_dir: Path = RUNS) -> list[dict]:
 def _table(rows: list[dict]) -> str:
     if not rows:
         return "<p>No runs yet.</p>"
-    head = "".join(f"<th>{html.escape(k)}</th>" for k in rows[0])
-    body = "".join("<tr>" + "".join(f"<td>{html.escape(str(v if v is not None else '-'))}</td>" for v in r.values())
-                   + "</tr>" for r in rows)
+    keys = list(dict.fromkeys(k for r in rows for k in r))
+    head = "".join(f"<th>{html.escape(k)}</th>" for k in keys)
+    body = "".join("<tr>" + "".join(f"<td>{html.escape(str(r.get(k) if r.get(k) is not None else '-'))}</td>"
+                                    for k in keys) + "</tr>" for r in rows)
     return f"<table><tr>{head}</tr>{body}</table>"
 
 
 def _print(rows: list[dict]) -> None:
     if not rows:
         return
-    keys = list(rows[0])
-    w = {k: max(len(k), *(len(str(r[k])) for r in rows)) for k in keys}
+    keys = list(dict.fromkeys(k for r in rows for k in r))
+    cell = lambda r, k: str(r.get(k) if r.get(k) is not None else "-")
+    w = {k: max(len(k), *(len(cell(r, k)) for r in rows)) for k in keys}
     print("  ".join(k.ljust(w[k]) for k in keys))
     for r in rows:
-        print("  ".join(str(r[k] if r[k] is not None else "-").ljust(w[k]) for k in keys))
+        print("  ".join(cell(r, k).ljust(w[k]) for k in keys))
 
 
 def main():

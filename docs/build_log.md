@@ -68,3 +68,15 @@ New tools:
 - Records now keep `first_score`, the judge's score before any fix: the fair comparison metric, because the fix loop would otherwise hide a weaker model.
 - `scorecard`: every judged run and every judge side by side, written to `data/runs/scorecard.html`. For judges: average score, spread between repeats of the same brief, how often the badge stays the same, cost.
 Tests: 135.
+
+## 27 Oct: The first comparison runs were silently invalid
+Nine comparison runs and three judge runs finished with normal-looking numbers. Reading the events showed most of them never used the model being tested:
+- **Claude Sonnet 5.5 and Haiku 5.5 reject `temperature=0`.** Every Claude call failed. The Composer fell back to the code merge, the Summariser to the safe version (22 of 22), and Haiku produced 0 of 66 judgements.
+- **Gemini's free tier allows 20 requests per model per day.** After 20, every call failed with a 17-hour wait; Gemini flash-lite judged 15 of 66.
+- Only the three GPT-4.1 mini runs and the gpt-4o-mini judge were real.
+The lesson: **graceful degradation can quietly corrupt an evaluation.** The pipeline did exactly what it should for a traveller (never block), and that hid the failures from the numbers.
+Fixes:
+- `models.yaml` marks models that don't accept a temperature (`temperature: false`); the LLM wrapper leaves it out for them.
+- **Preflight:** before any run or judge run, one tiny call to every model it uses. If one can't answer, the run doesn't start.
+- Runs record `agent_failures`; the scorecard marks a run or judge **valid: NO** if anything fell back or failed.
+The invalid runs are kept and shown as invalid, not deleted. Tests: 138.

@@ -28,4 +28,4 @@ class Services:
         self.places = GooglePlaces(self.budget)
         self.routes = GoogleRoutes(self.budget)
         self.providers = [PlacesCandidates(self.places), WebCandidates(Tavily(self.budget))]
-        self.llm = LLM(self.budget)
+        self.llm = LLM(self.budget, self.cfg.models)

@@ -92,7 +92,7 @@ async def test_judge_run_scores_stored_briefs_repeatedly(run_dir, monkeypatch):
     monkeypatch.setattr(jr, "judge_brief", fake_judge)
     s = FakeServices()
     s.budget = type("B", (), {"status": lambda self: {}})()
-    recs = await jr.judge_run("t1", s, model="anthropic/claude-haiku-5-5", repeat=2)
+    recs = await jr.judge_run("t1", s, model="anthropic/claude-haiku-5-5", repeat=2, check=False)
     assert len(recs) == 2 * len(load_testset().days)
     assert (tmp / "runs" / "t1" / "judged" / "anthropic__claude-haiku-5-5.jsonl").exists()
     assert {r["judge_model"] for r in recs} == {"anthropic/claude-haiku-5-5"}
@@ -126,3 +126,41 @@ async def test_scorecard_reads_runs_and_judges(run_dir, monkeypatch):
     assert sc.agent_rows(tmp / "runs")[0]["run"] == "t1"
     jr = sc.judge_rows(tmp / "runs")[0]
     assert jr["avg_spread"] == 5 and jr["max_spread"] == 10 and jr["same_badge"] == "100%"
+
+
+async def test_preflight_reports_models_that_cannot_answer():
+    from mb.llm import preflight
+
+    class Half:
+        async def call(self, *, model, **kw):
+            if model == "bad":
+                raise RuntimeError("quota exceeded\nlong details")
+    assert await preflight(Half(), {"good", "bad"}) == {"bad": "RuntimeError: quota exceeded"}
+
+
+def test_models_that_reject_temperature_are_marked():
+    from mb.config import load_config
+    m = load_config().models
+    assert m["anthropic/claude-sonnet-5-5"].temperature is False and m["openai/gpt-4o"].temperature is True
+
+
+async def test_llm_leaves_out_temperature_for_models_that_reject_it():
+    from types import SimpleNamespace
+    from mb.config import load_config
+    from mb.llm import LLM, _Ok
+    seen = {}
+
+    class Budget:
+        def check(self, est): pass
+        def record(self, **kw): pass
+
+    async def fake_create(**kw):
+        seen[kw["model"]] = "temperature" in kw
+        raw = SimpleNamespace(usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1))
+        return _Ok(ok=True), raw
+
+    llm = LLM(Budget(), load_config().models)
+    llm.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create_with_completion=fake_create)))
+    for m in ("anthropic/claude-haiku-5-5", "openai/gpt-4o"):
+        await llm.call(model=m, system="s", user="u", response_model=_Ok, run_id="t", agent_id="a")
+    assert seen == {"anthropic/claude-haiku-5-5": False, "openai/gpt-4o": True}
