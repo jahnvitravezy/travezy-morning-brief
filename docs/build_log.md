@@ -43,3 +43,28 @@ Prompts: summariser-v6, composer-v3. Tests: 116 passing. Rebuilding the contexts
 ## 26 Oct (early): Second review, small fixes
 The v2 pack fixed the swaps, airport and check-in buffers, the 07:00 night market and the dropped checks. Remaining: the code sometimes added a line the model had already covered in other words ("Jain-friendly", "expect delays"); beaches and bays got "check opening hours"; "Ubud" (a town) was suggested as a temple; names like "Playa Pacha | Pool and Private Beach Club| FIVE LUXE JBR". Fixed: any Jain line covers the Jain check, "delay" counts as late, no hours check for beaches and parks, towns excluded, names cleaned, Balinese temples count as outdoor in rain. Known and left for the judge: a suggestion at 19:00 on a day the brief also suggests moving dinner to 19:00. Tests: 118.
 Also found in the v3 run: a free day (td.21) got no suggestions, because a 07:00-23:30 window was checked only at 07:00, when almost everything is shut. Candidates are now checked every 30 minutes for the first open time, and the suggestion shows that time ("17:00-23:30"). Tests: 120.
+
+## 27 Oct: Agent 4, the judge
+- **Two layers.** Rule checks in code first (no model, no cost), then the judge model scores each rubric criterion 0-100 with a one-sentence reason and lists concrete issues. The scale's anchors (100 nothing to fix, 80 small slip, 60 one real problem, 40 several or misleading, 20 wrong) match the 1-5 scale the human reviewers use, so the two can be compared directly.
+- **Code decides, not the model.** Weighted score from the rubric's weights; badge from the rubric's thresholds (green 85, amber 60); decision: pass if green and no rule failure; otherwise fix, once (`max_fix_attempts: 1`), by sending the judge's reasons back to the Composer; the fix is judged again and kept only if it is not worse; still red or breaking a rule → the safe version.
+- **Never blocks.** If the judge model fails or times out, the rule checks decide alone and the brief goes out without a badge, flagged "judge unavailable".
+- **The judge must score every criterion exactly once**; anything else counts as a judge failure, not a judgement.
+- **Separate service and separate runs**: `POST /judge` scores any brief for a trip day; `python -m mb.evals.judge_run <run>` judges stored briefs without rewriting them, with `--model` (compare judges) and `--repeat` (consistency).
+- Runs now record each brief's verdict, score, badge, criterion scores and the judge's issues. Tests: 133.
+
+## 27 Oct: First judged run, and judge-v2
+judge-v1 inside the pipeline (run `judged-v1`): 22 days, average 74.7, 2 green / 19 amber / 1 red, 14 fixes, 1 fallback, 12.4 s per brief, $0.31. Reading every verdict showed the judge was mostly wrong in two ways, not the briefs:
+1. **It disputed facts computed in code.** "No rain expected" was marked inaccurate because one activity had a 5% chance of rain, on almost every brief.
+2. **It marked the brief down for problems in the plan.** Monkey Forest closing at 17:00, a 14-minute late arrival, a late dinner: the brief reported each one correctly, but the judge scored feasibility 40-60 and asked to "adjust the timeline", which the brief can't do. The Composer couldn't fix what wasn't wrong, so most fixes were wasted calls, and td.18 fell back to the safe version for nothing.
+It also asked for a timeline on a free day.
+**judge-v2** gives the judge the code's facts as facts (`facts_from_code`), says the plan is fixed (judge how the brief reports problems, not the problems), and says a free day has no timeline. judge-v1 results are kept as the record of the first version. The real test of the judge is agreement with the team's blind scores.
+Also: an idea's start time is rounded to the quarter hour ("10:02" became "10:15").
+
+## 27 Oct: judge-v2 results, and the comparison tools
+judge-v2 inside the pipeline (run `judged-v2`): average 88.2 (was 74.7), 13 green / 9 amber / 0 red, 8 fixes (was 14), 0 fallbacks (was 1), 9.2 s per brief, $0.28. On the 22 pack briefs (`judge_run baseline-v5`): average 87.8, $0.0085 for all 22.
+Still seen with gpt-4o-mini: a few "rain up to 5%" complaints and Monkey Forest's 17:00 closing still blamed on the brief, and one irrelevant issue (flight and hotel cost). I stopped tuning the prompt here: further changes would fit the judge to my own opinion. The next evidence comes from other judge models on the same briefs, and from the team's blind scores.
+New tools:
+- `runner --set role=model`: swap one agent's model for one run (summariser, surprise_finder, composer, judge). Comparisons change one role at a time, with the judge fixed, on the same stored contexts.
+- Records now keep `first_score`, the judge's score before any fix: the fair comparison metric, because the fix loop would otherwise hide a weaker model.
+- `scorecard`: every judged run and every judge side by side, written to `data/runs/scorecard.html`. For judges: average score, spread between repeats of the same brief, how often the badge stays the same, cost.
+Tests: 135.

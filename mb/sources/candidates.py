@@ -181,7 +181,7 @@ class PlacesCandidates:
 def _first_open(info, ctx: Context, earliest: int, latest_end: int):
     """The first visit time in the window when the place is open (every 30 min). A long free day
     used to be checked only at its first minute, 07:00, when almost everything is shut."""
-    t, result = earliest, None
+    t, result = -(-earliest // 15) * 15, None          # start on a quarter hour: 10:02 -> 10:15
     while t + VISIT_MIN <= latest_end:
         start, end = _t(t), _t(t + VISIT_MIN)
         result = is_open(info, ctx.date, start, end)

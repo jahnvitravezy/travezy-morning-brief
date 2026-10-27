@@ -311,3 +311,30 @@ class ComposerText(Contract):
     notification_body: str
     heads_ups: list[str] = []
     local_tip: str = ""
+
+
+# ---------- Agent 4, the judge ----------
+class CriterionScore(Contract):
+    id: str                            # a criterion id from the rubric
+    score: int = Field(ge=0, le=100)
+    reason: str                        # one sentence, pointing at the part of the brief it is about
+
+
+class JudgeOutput(Contract):
+    """What the judge model returns. Code does the weighting, badge and decision."""
+    scores: list[CriterionScore]
+    issues: list[str] = []             # concrete, fixable problems, most serious first; empty if none
+
+
+class Verdict(Contract):
+    """out.verdict"""
+    agent_id: str
+    rubric_id: str
+    model: str | None = None           # None when only the rule checks ran (judge unavailable)
+    rule_failures: list[str] = []
+    scores: list[CriterionScore] = []
+    score: int | None = Field(default=None, ge=0, le=100)   # weighted, 0-100
+    badge: Literal["green", "amber", "red"] | None = None
+    decision: Literal["pass", "fix", "fallback"]
+    reasons: list[str] = []            # what to fix (rule failures first, then the judge's issues)
+    error: str | None = None           # why the judge model couldn't score, if it couldn't

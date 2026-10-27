@@ -1,6 +1,10 @@
 """Runs a test set through the full pipeline and stores everything needed to compare runs.
 
   python -m mb.evals.runner baseline            (add --rebuild after a change to how contexts are built)
+  python -m mb.evals.runner cmp-summariser-sonnet --set summariser=anthropic/claude-sonnet-5-5
+
+--set role=model swaps one agent's model for this run only (roles: summariser, surprise_finder,
+composer, judge). Comparisons change one role at a time, so a difference has one cause.
 
 Contexts are built once per test day and saved; later runs reuse them, so every model is
 compared on exactly the same inputs and no Places search is paid for twice. For each day the
@@ -74,9 +78,15 @@ async def run_testset(run_id: str, testset: TestSet, s: Services, cfg=None, conc
                    "latency_ms": run.brief.meta.latency_ms, "tokens": run.brief.meta.tokens,
                    "cost_usd": round(run.cost_usd, 5), "surprises": len(run.brief.surprises),
                    "fallback": run.brief.meta.judge_verdict == "fallback", "rule_failures": failures,
+                   "verdict": run.brief.meta.judge_verdict, "score": run.brief.confidence.score,
+                   "badge": run.brief.confidence.badge,
+                   "first_score": run.verdicts[0].score if run.verdicts else None,
+                   "criteria": {c.id: c.score for c in (run.verdicts[-1].scores if run.verdicts else [])},
+                   "judge_issues": run.verdicts[0].reasons if run.verdicts else [],
                    "events": run.events}
             print(f"  {day.id} {day.trip_id:11} {rec['latency_ms']:>6} ms  ${rec['cost_usd']:.4f}  "
-                  f"surprises={rec['surprises']}  rules={'ok' if not failures else failures}")
+                  f"surprises={rec['surprises']}  judge={rec['verdict']} {rec['score']} {rec['badge']}  "
+                  f"rules={'ok' if not failures else failures}")
             return rec
 
     records = await asyncio.gather(*(one(d) for d in testset.days))
@@ -86,23 +96,55 @@ async def run_testset(run_id: str, testset: TestSet, s: Services, cfg=None, conc
     return records
 
 
+def _avg(xs):
+    xs = [x for x in xs if x is not None]
+    return round(sum(xs) / len(xs), 1) if xs else None
+
+
 def summary(records: list[dict]) -> dict:
     n = len(records)
+    scored = [r["score"] for r in records if r.get("score") is not None]
     return {"days": n, "fallbacks": sum(r["fallback"] for r in records),
+            "verdicts": {v: sum(r.get("verdict") == v for r in records) for v in ("pass", "fix", "fallback")},
+            "badges": {b: sum(r.get("badge") == b for r in records) for b in ("green", "amber", "red")},
+            "avg_score": round(sum(scored) / len(scored), 1) if scored else None,
+            "avg_first_score": _avg([r.get("first_score") for r in records]),
+            "judged": len(scored),
             "rule_pass_rate": round(sum(not r["rule_failures"] for r in records) / n, 3),
             "no_surprise_days": sum(r["surprises"] == 0 for r in records),
             "avg_latency_ms": round(sum(r["latency_ms"] for r in records) / n),
             "total_cost_usd": round(sum(r["cost_usd"] for r in records), 4)}
 
 
-async def main(run_id: str, rebuild: bool = False):
+def with_models(cfg, overrides: dict[str, str]):
+    """The registry with some agents' models swapped. The judge's rubric follows its agent."""
+    agents, rubrics = dict(cfg.agents), dict(cfg.rubrics)
+    for role, model in overrides.items():
+        if model not in cfg.models:
+            raise ValueError(f"{model} is not in models.yaml")
+        matches = [a for a in agents.values() if a.id.split(".")[1] == role]
+        if len(matches) != 1:
+            raise ValueError(f"unknown role '{role}': use one of {[a.id.split('.')[1] for a in agents.values()]}")
+        a = matches[0]
+        agents[a.id] = a.model_copy(update={"model": model})
+        if a.rubric:
+            rubrics[a.rubric] = rubrics[a.rubric].model_copy(update={"judge_model": model})
+    return cfg.model_copy(update={"agents": agents, "rubrics": rubrics})
+
+
+async def main(run_id: str, rebuild: bool = False, overrides: dict[str, str] | None = None):
     s = Services()
+    cfg = with_models(s.cfg, overrides or {})
     started = time.perf_counter()
-    records = await run_testset(run_id, load_testset(), s, rebuild=rebuild)
-    result = summary(records) | {"wall_s": round(time.perf_counter() - started)}
+    records = await run_testset(run_id, load_testset(), s, cfg=cfg, rebuild=rebuild)
+    result = summary(records) | {"wall_s": round(time.perf_counter() - started),
+                                 "models": {a.id: a.model for a in cfg.agents.values()},
+                                 "overrides": overrides or {}}
     (RUNS / run_id / "summary.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
     print("\n", result, "\n", s.budget.status())
 
 if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    asyncio.run(main(args[0] if args else "baseline", rebuild="--rebuild" in sys.argv))
+    argv = sys.argv[1:]
+    sets = dict(argv[i + 1].split("=", 1) for i, a in enumerate(argv) if a == "--set")
+    args = [a for i, a in enumerate(argv) if not a.startswith("--") and (i == 0 or argv[i - 1] != "--set")]
+    asyncio.run(main(args[0] if args else "baseline", rebuild="--rebuild" in argv, overrides=sets))

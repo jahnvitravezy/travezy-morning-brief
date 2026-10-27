@@ -75,3 +75,54 @@ async def test_blinded_pack_hides_scores_and_keeps_coverage(run_dir):
 def test_choose_is_repeatable():
     recs = [{"day_id": d.id, "covers": d.covers} for d in load_testset().days]
     assert pack.choose(recs) == pack.choose(recs)
+
+
+async def test_judge_run_scores_stored_briefs_repeatedly(run_dir, monkeypatch):
+    import mb.evals.judge_run as jr
+    from mb.contracts import Verdict
+    tmp, _ = run_dir
+    monkeypatch.setattr(jr, "CONTEXTS", tmp / "contexts")
+    monkeypatch.setattr(jr, "RUNS", tmp / "runs")
+    await runner.run_testset("t1", load_testset(), FakeServices())
+
+    async def fake_judge(ctx, brief, rubric, spec, llm, run_id, attempts_left):
+        return Verdict(agent_id=spec.id, rubric_id=rubric.id, model=spec.model, decision="pass", score=80,
+                       badge="amber"), None
+
+    monkeypatch.setattr(jr, "judge_brief", fake_judge)
+    s = FakeServices()
+    s.budget = type("B", (), {"status": lambda self: {}})()
+    recs = await jr.judge_run("t1", s, model="anthropic/claude-haiku-5-5", repeat=2)
+    assert len(recs) == 2 * len(load_testset().days)
+    assert (tmp / "runs" / "t1" / "judged" / "anthropic__claude-haiku-5-5.jsonl").exists()
+    assert {r["judge_model"] for r in recs} == {"anthropic/claude-haiku-5-5"}
+
+
+def test_one_role_can_be_swapped_and_unknown_ones_are_rejected():
+    from mb.config import load_config
+    cfg = runner.with_models(load_config(), {"summariser": "anthropic/claude-sonnet-5-5"})
+    assert cfg.agents["mb.summariser.v1"].model == "anthropic/claude-sonnet-5-5"
+    assert cfg.agents["mb.composer.v1"].model == "openai/gpt-4o"
+    j = runner.with_models(load_config(), {"judge": "gemini/gemini-3.5-flash-lite"})
+    assert j.rubrics["rubric.morning_brief.v1"].judge_model == "gemini/gemini-3.5-flash-lite"
+    with pytest.raises(ValueError):
+        runner.with_models(load_config(), {"writer": "openai/gpt-4o"})
+    with pytest.raises(ValueError):
+        runner.with_models(load_config(), {"summariser": "openai/gpt-5-unlisted"})
+
+
+async def test_scorecard_reads_runs_and_judges(run_dir, monkeypatch):
+    import mb.evals.scorecard as sc
+    tmp, _ = run_dir
+    await runner.run_testset("t1", load_testset(), FakeServices())
+    recs = await runner.run_testset("t1", load_testset(), FakeServices())
+    (tmp / "runs" / "t1" / "summary.json").write_text(json.dumps(runner.summary(recs) | {"models": {}}))
+    j = tmp / "runs" / "t1" / "judged"
+    j.mkdir()
+    (j / "x.jsonl").write_text("\n".join(json.dumps({"day_id": d, "repeat": k, "judge_model": "m", "score": s,
+                                                      "badge": "green", "cost_usd": 0.001})
+                                         for d, k, s in [("td.01", 1, 90), ("td.01", 2, 80), ("td.02", 1, 70),
+                                                         ("td.02", 2, 70)]))
+    assert sc.agent_rows(tmp / "runs")[0]["run"] == "t1"
+    jr = sc.judge_rows(tmp / "runs")[0]
+    assert jr["avg_spread"] == 5 and jr["max_spread"] == 10 and jr["same_badge"] == "100%"

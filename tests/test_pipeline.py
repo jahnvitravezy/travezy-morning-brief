@@ -15,7 +15,8 @@ from mb.sources.itinerary import FileLoader
 
 @pytest.fixture(scope="module")
 def ctx():
-    return build_context(FileLoader().load("dubai_up01"), 1)
+    c = build_context(FileLoader().load("dubai_up01"), 1)
+    return c.model_copy(update={"send_at_local": dt.time(7, 30), "timezone": "Asia/Dubai"})
 
 
 def _summary(ctx):
@@ -58,10 +59,13 @@ def test_safe_version_is_plan_only_with_no_badge(ctx):
 
 class FakeLLM:
     """Answers each agent by its response model; can be told to hang or fail."""
-    def __init__(self, hang=(), fail=()):
+    def __init__(self, hang=(), fail=(), judge_scores=(95,)):
         self.hang, self.fail = set(hang), set(fail)
+        self.judge_scores = list(judge_scores)      # one per judge call; the last one repeats
+        self.calls: list[str] = []
 
     async def call(self, *, response_model, agent_id, **kw):
+        self.calls.append(agent_id)
         if agent_id in self.hang:
             await asyncio.sleep(60)
         if agent_id in self.fail:
@@ -73,6 +77,12 @@ class FakeLLM:
         elif name == "ComposerText":
             out = ComposerText(notification_title="Day 2 in Dubai", notification_body="Old Dubai, plus 0 ideas",
                                heads_ups=["One"], local_tip="Tip 2")
+        elif name == "JudgeOutput":
+            from mb.contracts import CriterionScore, JudgeOutput
+            score = self.judge_scores.pop(0) if len(self.judge_scores) > 1 else self.judge_scores[0]
+            out = JudgeOutput(scores=[CriterionScore(id=c, score=score, reason="r") for c in
+                                      ("accuracy", "relevance", "feasibility", "format", "tone")],
+                              issues=[] if score >= 85 else ["Heads-up 2 is vague: say what to do"])
         else:
             from mb.contracts import SurprisePicks
             out = SurprisePicks()

@@ -7,7 +7,9 @@ time budget. Failures degrade, never block:
   - Surprise finder fails  -> brief without surprises
   - Composer fails         -> code-only merge of the summary and surprises
   - Summariser fails, or the time budget runs out -> the safe version (plan only)
-The judge (Agent 4) plugs in at the marked point.
+  - Judge: pass -> send with its badge; fix -> Composer once with the judge's reasons, then
+    judged again (kept only if not worse); still red or breaking a rule -> safe version;
+    judge model fails -> the rule checks decide alone, never blocking the brief.
 """
 from __future__ import annotations
 
@@ -21,7 +23,8 @@ from mb.agents.composer import merge, run_composer, safe_version
 from mb.agents.summariser import run_summariser
 from mb.agents.surprise_finder import run_surprise_finder
 from mb.config import AgentSpec, Config
-from mb.contracts import Context, MorningBrief, Summary, Surprises
+from mb.contracts import Context, MorningBrief, Summary, Surprises, Verdict
+from mb.judge.judge import judge_brief, stamp
 from mb.llm import LLM
 
 TRANSIENT = (asyncio.TimeoutError, litellm.exceptions.Timeout, litellm.exceptions.RateLimitError,
@@ -38,6 +41,7 @@ class BriefRun:
     events: list[str] = field(default_factory=list)   # what happened, step by step
     cost_usd: float = 0.0
     tokens: dict[str, int] = field(default_factory=dict)
+    verdicts: list[Verdict] = field(default_factory=list)   # first judgement, then after a fix
 
 
 def agent_for(cfg: Config, output: str) -> AgentSpec:
@@ -108,10 +112,76 @@ async def run_brief(ctx: Context, cfg: Config, llm: LLM, run_id: str,
         run.events.append(f"{a3.id}: failed ({type(e).__name__}) -> code-only merge")
         brief = merge(ctx, run.summary, run.surprises)
 
-    # --- Agent 4 (judge) plugs in here: pass -> send; fix -> run_composer(..., fix_reasons) once;
-    #     fallback -> safe_version. Until then, the brief goes out unjudged (no badge).
-    run.brief = brief
+    # --- Agent 4, the judge: pass -> send; fix -> Composer once with the reasons, judge again;
+    #     fallback -> safe version. A judge failure never blocks: the rule checks decide alone.
+    a4 = agent_for(cfg, "out.verdict")
+    rubric = cfg.rubrics[a4.rubric]
+    attempts = rubric.max_fix_attempts
+    verdict = await _judge(ctx, brief, rubric, a4, llm, run_id, attempts, clock, run, models)
+    fixed = False
+    while verdict.decision == "fix" and attempts > 0:
+        attempts -= 1
+        try:
+            new, res = await _step(f"{a3.id}:fix", lambda: run_composer(ctx, run.summary, run.surprises, a3, llm,
+                                                                        run_id, fix_reasons=verdict.reasons),
+                                   a3.timeout_s, clock, run)
+        except Exception as e:
+            run.events.append(f"{a3.id}:fix: failed ({type(e).__name__}) -> keep the first draft")
+            verdict = verdict.model_copy(update={"decision": _after_last_attempt(verdict, rubric)})
+            break
+        new_verdict = await _judge(ctx, new, rubric, a4, llm, run_id, attempts, clock, run, models)
+        if _better(new_verdict, verdict):
+            brief, verdict, fixed = new, new_verdict, True
+            run.events.append(f"judge: fix accepted ({verdict.score})")
+        else:
+            run.events.append(f"judge: fix not better ({new_verdict.score} vs {verdict.score}) -> keep first draft")
+            verdict = verdict.model_copy(update={"decision": _after_last_attempt(verdict, rubric)})
+            break
+
+    if verdict.decision == "fallback":
+        run.events.append("judge: fallback -> safe version")
+        run.brief = stamp(safe_version(ctx, "judge: " + "; ".join(verdict.reasons[:2])), verdict)
+        run.brief.meta.judge_verdict = "fallback"
+        return _finish(run, started, models)
+    run.brief = stamp(brief, verdict)
+    run.brief.meta.judge_verdict = "fix" if fixed else "pass"
     return _finish(run, started, models)
+
+
+async def _judge(ctx, brief, rubric, spec, llm, run_id, attempts_left, clock, run, models) -> Verdict:
+    """The judge as a pipeline step. If it can't run (time, error), the rule checks decide alone."""
+    try:
+        verdict, res = await _step(spec.id, lambda: judge_brief(ctx, brief, rubric, spec, llm, run_id,
+                                                                attempts_left), spec.timeout_s, clock, run)
+    except Exception as e:
+        from mb.judge.rules import run_rule_checks
+        from mb.judge.judge import decide
+        failures = run_rule_checks(brief, ctx, rubric)
+        run.events.append(f"{spec.id}: failed ({type(e).__name__}) -> rule checks only")
+        verdict = Verdict(agent_id=spec.id, rubric_id=rubric.id, rule_failures=failures, reasons=failures,
+                          decision=decide(failures, None, rubric, attempts_left), error=type(e).__name__)
+        res = None
+    if res is not None:
+        models[spec.id] = res.model
+    elif verdict.error:
+        run.events.append(f"{spec.id}: judge model unavailable ({verdict.error[:60]}) -> rule checks only")
+    run.verdicts.append(verdict)
+    return verdict
+
+
+def _better(new: Verdict, old: Verdict) -> bool:
+    """Keep the fix only if it breaks no new rule and doesn't score lower."""
+    if len(new.rule_failures) > len(old.rule_failures):
+        return False
+    if new.score is None or old.score is None:
+        return len(new.rule_failures) < len(old.rule_failures) or new.score is not None
+    return new.score >= old.score or len(new.rule_failures) < len(old.rule_failures)
+
+
+def _after_last_attempt(v: Verdict, rubric) -> str:
+    if v.rule_failures or (v.score is not None and v.score < rubric.badge.amber):
+        return "fallback"
+    return "pass"
 
 
 def _finish(run: BriefRun, started: float, models: dict[str, str]) -> BriefRun:

@@ -1,6 +1,7 @@
 """HTTP service: the agents as a separate Python service the app can call.
 
-POST /brief  {trip_id, date, weather_scenario?}  ->  one Morning Brief in the output contract.
+POST /brief  {trip_id, date, weather_scenario?}  ->  one Morning Brief in the output contract, judged.
+POST /judge  {trip_id, date, weather_scenario?, brief}  ->  the judge's verdict on a given brief.
 GET  /health                                     ->  liveness and budget status.
 GET  /trips                                      ->  the trips the loader knows.
 Interactive docs (the API contract) are served at /docs.
@@ -16,8 +17,9 @@ from pydantic import BaseModel
 
 from mb.budget import BudgetExceeded
 from mb.context import build_full_context
-from mb.contracts import MorningBrief
-from mb.pipeline import run_brief
+from mb.contracts import MorningBrief, Verdict
+from mb.judge.judge import judge_brief
+from mb.pipeline import agent_for, run_brief
 from mb.services import Services
 
 
@@ -52,8 +54,11 @@ async def trips():
     return app.state.services.loader.trip_ids()
 
 
-@app.post("/brief", response_model=MorningBrief)
-async def brief(req: BriefRequest):
+class JudgeRequest(BriefRequest):
+    brief: MorningBrief
+
+
+async def _context(req: BriefRequest):
     s: Services = app.state.services
     try:
         trip = s.loader.load(req.trip_id)
@@ -62,11 +67,31 @@ async def brief(req: BriefRequest):
     day = next((d for d in trip.days if d.date == req.date), None)
     if day is None:
         raise HTTPException(404, f"{req.trip_id} has no day on {req.date}")
+    return await build_full_context(trip, day.index, s.meteo, req.weather_scenario, places=s.places,
+                                    routes=s.routes, run_id=f"api-{req.trip_id}-{req.date}",
+                                    providers=s.providers)
+
+
+@app.post("/brief", response_model=MorningBrief)
+async def brief(req: BriefRequest):
+    s: Services = app.state.services
     try:
-        ctx = await build_full_context(trip, day.index, s.meteo, req.weather_scenario, places=s.places,
-                                       routes=s.routes, run_id=f"api-{req.trip_id}-{req.date}",
-                                       providers=s.providers)
+        ctx = await _context(req)
         run = await run_brief(ctx, s.cfg, s.llm, run_id=f"api-{ctx.ctx_id}")
     except BudgetExceeded as e:
         raise HTTPException(503, f"Usage budget reached: {e}")
     return run.brief
+
+
+@app.post("/judge", response_model=Verdict)
+async def judge(req: JudgeRequest):
+    """The judge as its own service: score any brief for a trip day against the rubric."""
+    s: Services = app.state.services
+    a4 = agent_for(s.cfg, "out.verdict")
+    try:
+        ctx = await _context(req)
+        verdict, _ = await judge_brief(ctx, req.brief, s.cfg.rubrics[a4.rubric], a4, s.llm,
+                                       run_id=f"api-judge-{ctx.ctx_id}", attempts_left=0)
+    except BudgetExceeded as e:
+        raise HTTPException(503, f"Usage budget reached: {e}")
+    return verdict

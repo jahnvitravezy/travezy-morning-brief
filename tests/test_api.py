@@ -41,3 +41,15 @@ def test_brief_returns_the_output_contract(client):
 def test_unknown_trip_and_date_are_404(client):
     assert client.post("/brief", json={"trip_id": "nope", "date": "2026-11-21"}).status_code == 404
     assert client.post("/brief", json={"trip_id": "dubai_up01", "date": "2030-01-01"}).status_code == 404
+
+
+def test_judge_endpoint_returns_a_verdict(client, monkeypatch):
+    from mb.contracts import Verdict
+
+    async def fake_judge(ctx, brief, rubric, spec, llm, run_id, attempts_left):
+        return Verdict(agent_id=spec.id, rubric_id=rubric.id, decision="pass", score=90, badge="green"), None
+
+    monkeypatch.setattr(api, "judge_brief", fake_judge)
+    b = client.post("/brief", json={"trip_id": "dubai_up01", "date": "2026-11-21"}).json()
+    r = client.post("/judge", json={"trip_id": "dubai_up01", "date": "2026-11-21", "brief": b})
+    assert r.status_code == 200 and r.json()["badge"] == "green"
