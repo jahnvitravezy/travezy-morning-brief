@@ -53,3 +53,14 @@ def test_judge_endpoint_returns_a_verdict(client, monkeypatch):
     b = client.post("/brief", json={"trip_id": "dubai_up01", "date": "2026-11-21"}).json()
     r = client.post("/judge", json={"trip_id": "dubai_up01", "date": "2026-11-21", "brief": b})
     assert r.status_code == 200 and r.json()["badge"] == "green"
+
+
+def test_outbox_lists_prepared_briefs(client, tmp_path):
+    from mb.store import FileStore, OutboxItem
+    api.app.state.store = FileStore(tmp_path)
+    api.app.state.store.save(OutboxItem("dubai_up01", "2026-11-21", "Asia/Dubai", "07:30", "2026-11-21T03:30:00+00:00",
+                                        "pass", 90, "green", {"notification": {"title": "Day 2 in Dubai"}}))
+    r = client.get("/outbox/2026-11-21").json()
+    assert r == [{"trip_id": "dubai_up01", "date": "2026-11-21", "timezone": "Asia/Dubai", "send_at_local": "07:30",
+                  "send_at_utc": "2026-11-21T03:30:00+00:00", "verdict": "pass", "score": 90, "badge": "green",
+                  "title": "Day 2 in Dubai"}]

@@ -198,6 +198,21 @@ def _with_travel(windows: list[Window], day: TripDay, legs: list[TravelLeg]) -> 
     return out
 
 
+async def wake_timezone(trip: Trip, day: TripDay, meteo: OpenMeteo):
+    """The time zone where the traveller wakes up that day: home on an arrival morning that starts
+    with the flight, the destination otherwise. Returns (timezone, destination geo, arrival offset)."""
+    if not trip.destination:
+        return None, None, 0
+    dest = await meteo.geocode(trip.destination)
+    tz, offset = dest.timezone, 0
+    if day.is_arrival and trip.origin:
+        origin = await meteo.geocode(trip.origin)
+        offset = offset_minutes(origin.timezone, dest.timezone, day.date)
+        if day.activities and day.activities[0].kind == "move":
+            tz = origin.timezone          # they wake up at home on arrival morning
+    return tz, dest, offset
+
+
 async def build_full_context(trip: Trip, index: int, meteo: OpenMeteo,
                              weather_scenario: str | None = None, today: date | None = None,
                              places: GooglePlaces | None = None, routes: GoogleRoutes | None = None,
@@ -206,14 +221,7 @@ async def build_full_context(trip: Trip, index: int, meteo: OpenMeteo,
     fresh: dict[str, str] = {}
     tz, dest, offset = None, None, 0
     try:
-        if trip.destination:
-            dest = await meteo.geocode(trip.destination)
-            tz = dest.timezone
-            if day.is_arrival and trip.origin:
-                origin = await meteo.geocode(trip.origin)
-                offset = offset_minutes(origin.timezone, dest.timezone, day.date)
-                if day.activities and day.activities[0].kind == "move":
-                    tz = origin.timezone          # they wake up at home on arrival morning
+        tz, dest, offset = await wake_timezone(trip, day, meteo)
         fresh["geocode"] = "live"
     except (httpx.HTTPError, LookupError):
         fresh["geocode"] = "unavailable"

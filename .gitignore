@@ -8,3 +8,4 @@ data/usage/
 !requirements.txt
 data/contexts/
 data/runs/
+data/outbox/

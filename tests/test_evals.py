@@ -187,3 +187,25 @@ async def test_sonnet_uses_the_json_client_not_forced_tools():
     for m in ("anthropic/claude-sonnet-5-5", "anthropic/claude-haiku-5-5"):
         await llm.call(model=m, system="s", user="u", response_model=_Ok, run_id="t", agent_id="a")
     assert used == ["json", "tools"]
+
+
+def test_self_preference_compares_each_judge_on_both_families(tmp_path, monkeypatch):
+    import mb.evals.self_preference as sp
+    monkeypatch.setattr(sp, "RUNS", tmp_path)
+    runs = {"oa": "openai/gpt-4o", "an": "anthropic/claude-sonnet-5-5"}
+    judge = {("oa", "openai/gpt-4o-mini"): 90, ("an", "openai/gpt-4o-mini"): 80,
+             ("oa", "anthropic/claude-haiku-5-5"): 70, ("an", "anthropic/claude-haiku-5-5"): 72}
+    for run, writer in runs.items():
+        d = tmp_path / run
+        (d / "judged").mkdir(parents=True)
+        (d / "summary.json").write_text(json.dumps({"models": {
+            "mb.summariser.v1": writer, "mb.surprise_finder.v1": writer, "mb.composer.v1": writer,
+            "mb.judge.v1": "openai/gpt-4o-mini"}}))
+        (d / "records.jsonl").write_text("\n".join(json.dumps({"day_id": f"td.0{i}", "verdict": "pass"}) for i in (1, 2)))
+        for (r, j), score in judge.items():
+            if r == run:
+                (d / "judged" / f"{j.replace('/', '__')}.jsonl").write_text("\n".join(
+                    json.dumps({"day_id": f"td.0{i}", "judge_model": j, "score": score}) for i in (1, 2)))
+    rows = {r["judge"]: r for r in sp.table(["oa", "an"])}
+    assert rows["openai/gpt-4o-mini"]["own_minus_other"] == 10       # prefers OpenAI briefs by 10
+    assert rows["anthropic/claude-haiku-5-5"]["own_minus_other"] == 2

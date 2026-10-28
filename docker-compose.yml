@@ -2,8 +2,29 @@ services:
   api:
     build: .
     env_file: .env                 # keys stay on the machine, never in the image
+    environment:
+      DATABASE_URL: postgresql://mb:${POSTGRES_PASSWORD:-mb-local}@db:5432/mb   # the outbox lives in Postgres
     ports:
       - "8000:8000"
     volumes:
       - ./data/cache:/app/data/cache    # keep paid lookups between runs
       - ./data/usage:/app/data/usage    # one budget ledger, inside and outside Docker
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mb
+      POSTGRES_DB: mb
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mb-local}   # local only; set POSTGRES_PASSWORD in .env to change
+    volumes:
+      - pgdata:/var/lib/postgresql/data                   # briefs survive restarts and rebuilds
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mb -d mb"]
+      interval: 2s
+      retries: 15
+
+volumes:
+  pgdata:

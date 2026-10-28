@@ -98,3 +98,21 @@ Judges on the same 22 pack briefs, 3 repeats each:
 | claude-haiku-5-5 | 66.1 | 3.7 | 77% | 17 |
 They disagree by 33 points on the same briefs. gpt-4.1-mini passes almost everything; Haiku is strict, less consistent, and partly right (it caught a tip that invented a "Coffee Museum" and heads-ups that state a time without saying what to do) and partly wrong (it called the code-computed spend "unsupported"). Both OpenAI judges score briefs written by OpenAI models higher, which may be self-preference or leniency; the team's blind scores will tell which judge is closer to people.
 Also: spend and timeline added to the judge's `facts_from_code`; "cash only" added to what the brief must report (Haiku's Composer dropped it once). Tests: 140.
+
+
+## 27 Oct: Comparison results, all valid
+Same 22 contexts, same judge (gpt-4o-mini, judge-v2), first score before any fix. GPT-4o baseline (`cmp-baseline-gpt4o`): **88.3**, 1.28 cents per brief, 9.9 s.
+| role | GPT-4.1 mini | Claude Haiku 5.5 | Claude Sonnet 5.5 |
+|---|---|---|---|
+| summariser | 86.1 | 86.3 | 86.1 (17.2 s, 2.5 c) |
+| surprise finder | 87.7 | 86.3 | 87.0 |
+| composer | 85.9 | 86.5, 14/22 fell back (notification too long) | 88.1 (16.7 s, 2.2 c) |
+Every valid result is within 2.4 points of GPT-4o, and the judge's own score moves about 2 points between repeats of the same brief, so **no model is clearly better or worse than GPT-4o on this set**, except Haiku as Composer, which fails the format rule. Gemini runs stay marked invalid (free-tier quota).
+Judges re-run with the spend/timeline facts: gpt-4o-mini 87.8 (spread 2.1, 91% same badge); gpt-4.1-mini 98.5 (passes nearly everything); Haiku 66.7 (spread 3.7, 91% same badge, 5 red). Haiku's issues include real ones the OpenAI judges missed (an invented "Coffee Museum" tip; heads-ups that give a time but no action). Which judge to trust is decided by agreement with the team's blind scores, not by which number looks best.
+
+## 28 Oct: Batch runner, outbox in Postgres, self-preference test
+- **Batch runner** (`python -m mb.batch`): run on a schedule; each run finds every trip day whose local send time falls in the next `--window` minutes and prepares its brief ahead of time. Local send time is 07:30, or an hour before an early first activity, **in the time zone where the traveller wakes up**: home on an arrival morning that starts with the flight, the destination otherwise. Example: Bali day 4 starts at 07:00, so the brief goes at 06:00 WITA = **22:00 UTC the day before**. `--plan` lists who is due at no cost. Briefs already in the outbox are skipped, so runs can repeat or overlap safely. `wake_timezone()` was pulled out of the context builder so both use the same rule.
+- **Outbox**: one brief per trip per date, with its time zone, local and UTC send times, verdict, score and badge. A file store by default; **Postgres** when `DATABASE_URL` is set. `docker compose` now starts Postgres 16 (password from `.env`, data in a named volume). `GET /outbox/{date}` lists what's ready. Tested against a real Postgres.
+- Sending the notification, and when it may interrupt the traveller, belong to the app: covered in the design note.
+- **Self-preference test** (`python -m mb.evals.self_preference`): the same 22 days written entirely by one family (GPT-4o) and entirely by another (Claude Sonnet), each judged by all three judges. Compares each judge's own-family preference with the other judges'.
+Tests: 145 (+1 that runs when a Postgres is available).
