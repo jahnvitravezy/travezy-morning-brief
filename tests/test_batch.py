@@ -85,3 +85,14 @@ def test_postgres_store_round_trip():
     got = [i for i in s.for_date("2026-11-21") if i.trip_id == "t_pg"]
     assert len(got) == 1 and got[0].brief == {"x": 1} and got[0].send_at_utc.startswith("2026-11-21T03:30")
     assert s.has("t_pg", "2026-11-21")
+
+
+@pytest.mark.skipif(not os.environ.get("TEST_DATABASE_URL"), reason="needs a Postgres (TEST_DATABASE_URL)")
+def test_two_stores_starting_together_do_not_crash():
+    from concurrent.futures import ThreadPoolExecutor
+    from mb.store import PostgresStore
+    url = os.environ["TEST_DATABASE_URL"]
+    PostgresStore(url).conn.execute("DROP TABLE IF EXISTS outbox")
+    with ThreadPoolExecutor(6) as ex:
+        stores = list(ex.map(lambda _: PostgresStore(url), range(6)))
+    assert all(s.has("nobody", "2026-01-01") is False for s in stores)

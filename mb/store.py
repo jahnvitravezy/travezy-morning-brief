@@ -56,6 +56,7 @@ class FileStore:
 
 
 class PostgresStore:
+    LOCK_ID = 726017                              # any fixed number: the outbox's schema lock
     SCHEMA = """CREATE TABLE IF NOT EXISTS outbox (
         trip_id text NOT NULL, date date NOT NULL, timezone text NOT NULL,
         send_at_local text NOT NULL, send_at_utc timestamptz NOT NULL,
@@ -66,7 +67,15 @@ class PostgresStore:
     def __init__(self, url: str):
         import psycopg
         self.conn = psycopg.connect(url, autocommit=True)
-        self.conn.execute(self.SCHEMA)
+        # Two processes starting together (the API and a batch run) can both try to create the table:
+        # "IF NOT EXISTS" alone isn't safe against that race in Postgres. A lock makes them take turns.
+        self.conn.execute("SELECT pg_advisory_lock(%s)", (self.LOCK_ID,))
+        try:
+            self.conn.execute(self.SCHEMA)
+        except (psycopg.errors.UniqueViolation, psycopg.errors.DuplicateTable):
+            pass                                  # created by the other process a moment ago
+        finally:
+            self.conn.execute("SELECT pg_advisory_unlock(%s)", (self.LOCK_ID,))
 
     def has(self, trip_id: str, date: str) -> bool:
         return self.conn.execute("SELECT 1 FROM outbox WHERE trip_id=%s AND date=%s", (trip_id, date)).fetchone() is not None

@@ -116,3 +116,7 @@ Judges re-run with the spend/timeline facts: gpt-4o-mini 87.8 (spread 2.1, 91% s
 - Sending the notification, and when it may interrupt the traveller, belong to the app: covered in the design note.
 - **Self-preference test** (`python -m mb.evals.self_preference`): the same 22 days written entirely by one family (GPT-4o) and entirely by another (Claude Sonnet), each judged by all three judges. Compares each judge's own-family preference with the other judges'.
 Tests: 145 (+1 that runs when a Postgres is available).
+Two Docker problems while checking the batch runner in compose:
+- **A failed build silently ran old code.** pip timed out on a slow connection, the image wasn't rebuilt, and `docker compose run` started the image from 23 Oct, which had no batch runner. The Dockerfile now gives pip a 2-minute timeout, 10 retries and a download cache kept between builds; and builds are run as their own step (`docker compose build`) before `up`.
+- **The API crashed on its first start**: it and a batch run both created the outbox table at the same moment, and `CREATE TABLE IF NOT EXISTS` isn't safe against that race in Postgres. Table creation now takes a Postgres advisory lock. Tested with six stores starting at once.
+In compose, the batch prepared the five Dubai briefs for 07:30 local (03:30 UTC), all green, into Postgres; the second run skipped all five.
