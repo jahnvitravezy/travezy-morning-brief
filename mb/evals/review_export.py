@@ -94,7 +94,11 @@ def main(run_id: str):
     for code, k in key.items():
         ctx = Context.model_validate_json((CONTEXTS / f"{index[k['day_id']]}.json").read_text(encoding="utf-8"))
         b = MorningBrief.model_validate_json((run_dir / "briefs" / f"{k['day_id']}.json").read_text(encoding="utf-8"))
-        briefs.append({"code": code, "inputs": json.loads(brief_input(ctx)) | {
+        saved = run_dir / "inputs" / f"{k['day_id']}.json"     # what the writers saw, saved at run time
+        if not saved.exists():
+            print(f"  {code}: no saved inputs for {k['day_id']}; derived with today's code (wording may differ)")
+        inputs = json.loads(saved.read_text(encoding="utf-8") if saved.exists() else brief_input(ctx))
+        briefs.append({"code": code, "inputs": inputs | {
                            "free_windows": [f"{w.start:%H:%M}-{w.end:%H:%M}" for w in ctx.free_windows],
                            "candidates_for_ideas": candidate_facts(ctx)},
                        "brief": b.model_dump(mode="json", exclude=HIDDEN)})

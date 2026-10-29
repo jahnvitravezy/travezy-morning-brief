@@ -65,6 +65,7 @@ async def run_testset(run_id: str, testset: TestSet, s: Services, cfg=None, conc
     rubric = cfg.rubrics[agent_for(cfg, "out.verdict").rubric]      # the judge's own rubric
     out_dir = RUNS / run_id
     (out_dir / "briefs").mkdir(parents=True, exist_ok=True)
+    (out_dir / "inputs").mkdir(parents=True, exist_ok=True)
     contexts = await contexts_for(testset, s, rebuild)
     sem = asyncio.Semaphore(concurrency)
 
@@ -74,6 +75,10 @@ async def run_testset(run_id: str, testset: TestSet, s: Services, cfg=None, conc
             run = await run_brief(ctx, cfg, s.llm, run_id=f"{run_id}:{day.id}")
             failures = run_rule_checks(run.brief, ctx, rubric)
             (out_dir / "briefs" / f"{day.id}.json").write_text(run.brief.model_dump_json(indent=1), encoding="utf-8")
+            # The exact input the writers saw, kept with the brief: a later change to how checks are
+            # worded must not change what a reviewer is told the brief was written from.
+            from mb.agents.summariser import brief_input
+            (out_dir / "inputs" / f"{day.id}.json").write_text(brief_input(ctx), encoding="utf-8")
             rec = {"run_id": run_id, "day_id": day.id, "trip_id": day.trip_id, "date": day.date.isoformat(),
                    "covers": day.covers, "ctx_id": ctx.ctx_id, "models": run.brief.meta.models,
                    "latency_ms": run.brief.meta.latency_ms, "tokens": run.brief.meta.tokens,

@@ -186,3 +186,8 @@ Gemini flash-lite (15 of 66 judged, free-tier quota) is left out of the export: 
   kappa 0.21; none of the three judges caught Opus's 4 unsafe briefs (Haiku caught 1). Small sample:
   the Travezy reviewer's verdicts decide.
 - Tests: 171 passed, 2 skipped.
+- Review pack inputs: briefs.json re-derived the code's checks with today's code, so 4 late-finish
+  lines (B02, B11, B14, B19) showed tonight's new wording instead of what the writers saw. Runs now
+  save each brief's exact input (`inputs/<day>.json`) and the export uses it. baseline-v5's inputs were
+  rebuilt with the code that wrote it (commit bc6fbb6) and saved; briefs.html, from the stored
+  contexts, was already exact.
