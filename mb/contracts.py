@@ -247,6 +247,7 @@ class MorningBrief(Contract):
     trip_id: str
     date: dt.date
     send_at_local: str = ""
+    send_at_utc: str = ""              # the same moment in UTC, for the backend that sends the notification
     timezone: str = ""
     notification: Notification = Notification()
     timeline: list[TimelineItem] = []
@@ -324,6 +325,7 @@ class JudgeOutput(Contract):
     """What the judge model returns. Code does the weighting, badge and decision."""
     scores: list[CriterionScore]
     issues: list[str] = []             # concrete, fixable problems, most serious first; empty if none
+    serious: list[str] = []            # errors that make the brief wrong or unsafe, whatever the score
 
 
 class Verdict(Contract):
@@ -336,5 +338,7 @@ class Verdict(Contract):
     score: int | None = Field(default=None, ge=0, le=100)   # weighted, 0-100
     badge: Literal["green", "amber", "red"] | None = None
     decision: Literal["pass", "fix", "fallback"]
-    reasons: list[str] = []            # what to fix (rule failures first, then the judge's issues)
+    serious: list[str] = []            # the judge's serious errors: each one fails the brief, whatever the score
+    recommendation: Literal["send", "fix_first", "dont_send"] | None = None   # comparable with a reviewer
+    reasons: list[str] = []            # what to fix (rule failures, serious errors, then the judge's issues)
     error: str | None = None           # why the judge model couldn't score, if it couldn't

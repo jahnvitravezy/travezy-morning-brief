@@ -5,9 +5,11 @@ scores each rubric criterion 0-100 with a one-sentence reason and lists concrete
 does the rest, so the decision is reproducible and the thresholds live in the rubric:
   weighted score = sum(criterion score x weight)
   badge          = green >= rubric.badge.green, amber >= rubric.badge.amber, else red
-  decision       = pass     if green and no rule failures
-                   fix      if amber/red or a rule failure, and a fix attempt is left
-                   fallback if still red (or failing a rule) with no attempt left
+  decision       = pass     if green, no rule failure and no serious error
+                   fix      if amber/red, a rule failure or a serious error, and a fix attempt is left
+                   fallback if still red, failing a rule or with a serious error, with no attempt left
+A serious error (a wrong time, place, price or opening hour; a diet mistake; anything unsafe)
+fails the brief whatever its total score. A fixed brief is judged again before it is sent.
 If the judge model fails, the rule checks still decide, and the brief is never blocked by it.
 """
 from __future__ import annotations
@@ -22,6 +24,13 @@ from mb.judge.rules import run_rule_checks
 from mb.llm import LLM, LLMResult, load_prompt
 
 
+def candidate_facts(ctx: Context) -> list[dict]:
+    """What we verified about each idea's place: the brief may use these facts."""
+    return [{"name": c.name, "slot": f"{(c.open_from or c.window.start):%H:%M}-{c.window.end:%H:%M}",
+             "travel_min": c.travel_min, "rating": c.rating, "types": c.types[:5], "source": c.provider}
+            for c in ctx.candidates]
+
+
 def judge_input(ctx: Context, brief: MorningBrief, rubric: Rubric) -> str:
     """What the judge sees: the facts the brief was written from, the brief, and the rubric."""
     shown = brief.model_dump(mode="json", exclude={"meta", "confidence", "brief_id", "actions"})
@@ -30,7 +39,7 @@ def judge_input(ctx: Context, brief: MorningBrief, rubric: Rubric) -> str:
         "inputs": json.loads(brief_input(ctx)) | {
             "free_day": ctx.day.is_free,
             "free_windows": [f"{w.start:%H:%M}-{w.end:%H:%M}" for w in ctx.free_windows],
-            "candidates_for_surprises": [c.name for c in ctx.candidates],
+            "candidates_for_surprises": candidate_facts(ctx),
         },
         "facts_from_code": {
             "weather_line": weather_summary(ctx), "weather_clashes": weather_clashes(ctx),
@@ -59,15 +68,27 @@ def validate_scores(out: JudgeOutput, rubric: Rubric) -> None:
         raise ValueError(f"judge returned criteria {got}, rubric has {want}")
 
 
-def decide(rule_failures: list[str], score: int | None, rubric: Rubric, attempts_left: int) -> str:
+def decide(rule_failures: list[str], score: int | None, rubric: Rubric, attempts_left: int,
+           serious: list[str] | None = None) -> str:
+    """A rule failure or a serious error fails the brief whatever its total score."""
+    blocking = bool(rule_failures) or bool(serious)
     below_green = score is not None and score < rubric.badge.green
-    if not rule_failures and not below_green:
+    if not blocking and not below_green:
         return "pass"
     if attempts_left > 0:
         return "fix"
-    if rule_failures or (score is not None and score < rubric.badge.amber):
+    if blocking or (score is not None and score < rubric.badge.amber):
         return "fallback"
     return "pass"                       # amber after the last attempt: send it, with the amber badge
+
+
+def recommendation(rule_failures: list[str], serious: list[str], score: int | None, rubric: Rubric) -> str | None:
+    """The verdict in a reviewer's words (send as is / fix first / don't send), for measuring agreement."""
+    if rule_failures or serious:
+        return "dont_send"
+    if score is None:
+        return None
+    return "send" if score >= rubric.badge.green else "fix_first" if score >= rubric.badge.amber else "dont_send"
 
 
 async def judge_brief(ctx: Context, brief: MorningBrief, rubric: Rubric, spec: AgentSpec, llm: LLM,
@@ -82,12 +103,15 @@ async def judge_brief(ctx: Context, brief: MorningBrief, rubric: Rubric, spec: A
     except Exception as e:              # the judge never blocks a brief: rule checks decide alone
         decision = decide(failures, None, rubric, attempts_left)
         return Verdict(agent_id=spec.id, rubric_id=rubric.id, rule_failures=failures, decision=decision,
+                       recommendation=recommendation(failures, [], None, rubric),
                        reasons=failures, error=f"{type(e).__name__}: {str(e)[:200]}"), None
     score = weighted(res.output.scores, rubric)
-    decision = decide(failures, score, rubric, attempts_left)
+    serious = res.output.serious
+    decision = decide(failures, score, rubric, attempts_left, serious)
     return Verdict(agent_id=spec.id, rubric_id=rubric.id, model=res.model, rule_failures=failures,
-                   scores=res.output.scores, score=score, badge=badge_for(score, rubric),
-                   decision=decision, reasons=failures + res.output.issues), res
+                   scores=res.output.scores, score=score, badge=badge_for(score, rubric), serious=serious,
+                   recommendation=recommendation(failures, serious, score, rubric),
+                   decision=decision, reasons=failures + serious + res.output.issues), res
 
 
 def stamp(brief: MorningBrief, v: Verdict) -> MorningBrief:
@@ -95,6 +119,7 @@ def stamp(brief: MorningBrief, v: Verdict) -> MorningBrief:
     b = brief.model_copy(deep=True)
     b.confidence.score = v.score
     b.confidence.badge = v.badge
-    b.confidence.flags = [*b.confidence.flags, *v.rule_failures] + ([f"judge unavailable: {v.error}"] if v.error else [])
+    b.confidence.flags = ([*b.confidence.flags, *v.rule_failures] + [f"serious: {x}" for x in v.serious]
+                          + ([f"judge unavailable: {v.error}"] if v.error else []))
     b.meta.judge_verdict = v.decision
     return b

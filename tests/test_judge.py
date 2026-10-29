@@ -93,3 +93,52 @@ async def test_judge_failure_never_blocks(ctx):
     run = await pipeline.run_brief(ctx, CFG, FakeLLM(fail={"mb.judge.v1"}), run_id="t")
     assert run.brief.meta.judge_verdict == "pass" and run.brief.confidence.badge is None
     assert any("judge unavailable" in f for f in run.brief.confidence.flags)
+
+
+def test_a_serious_error_fails_the_brief_whatever_the_score():
+    from mb.judge.judge import recommendation
+    assert decide([], 95, RUBRIC, attempts_left=1, serious=["wrong opening time"]) == "fix"
+    assert decide([], 95, RUBRIC, attempts_left=0, serious=["wrong opening time"]) == "fallback"
+    assert recommendation([], ["diet mistake"], 95, RUBRIC) == "dont_send"
+    assert recommendation([], [], 90, RUBRIC) == "send"
+    assert recommendation([], [], 70, RUBRIC) == "fix_first"
+    assert recommendation([], [], 40, RUBRIC) == "dont_send"
+    assert "WRONG OR UNSAFE" in load_prompt("judge-v3")
+
+
+async def test_serious_error_is_fixed_and_checked_again(ctx):
+    class Serious(FakeLLM):
+        def __init__(self):
+            super().__init__(judge_scores=[95])
+            self.judged = 0
+
+        async def call(self, *, response_model, agent_id, **kw):
+            res = await super().call(response_model=response_model, agent_id=agent_id, **kw)
+            if response_model.__name__ == "JudgeOutput":
+                self.judged += 1
+                if self.judged == 1:
+                    res.output.serious = ["Heads-up 1 gives the wrong opening time"]
+            return res
+
+    llm = Serious()
+    run = await pipeline.run_brief(ctx, CFG, llm, run_id="t")
+    assert llm.judged == 2                                     # the fixed brief was judged again
+    assert run.brief.meta.judge_verdict == "fix" and run.brief.confidence.badge == "green"
+
+
+async def test_serious_error_that_survives_the_fix_sends_the_safe_version(ctx):
+    class AlwaysSerious(FakeLLM):
+        async def call(self, *, response_model, agent_id, **kw):
+            res = await super().call(response_model=response_model, agent_id=agent_id, **kw)
+            if response_model.__name__ == "JudgeOutput":
+                res.output.serious = ["Sends a Jain family to a kebab house with no warning"]
+            return res
+
+    run = await pipeline.run_brief(ctx, CFG, AlwaysSerious(judge_scores=[95]), run_id="t")
+    assert run.brief.meta.judge_verdict == "fallback" and run.brief.surprises == []
+    assert any(f.startswith("serious:") for f in run.brief.confidence.flags)
+
+
+def test_every_brief_carries_its_send_time_in_utc(ctx):
+    from mb.agents.composer import safe_version
+    assert safe_version(ctx, "x").send_at_utc == "2026-11-21T03:30:00Z"     # 07:30 in Dubai

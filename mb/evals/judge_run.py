@@ -52,6 +52,7 @@ async def judge_run(run_id: str, s: Services, model: str | None = None, repeat: 
             brief = MorningBrief.model_validate_json((run_dir / "briefs" / f"{day_id}.json").read_text(encoding="utf-8"))
             v, res = await judge_brief(ctx, brief, rubric, a4, s.llm, f"judge:{run_id}:{day_id}:{k}", attempts_left=0)
             rec = {"day_id": day_id, "repeat": k, "judge_model": a4.model, "score": v.score, "badge": v.badge,
+                   "recommendation": v.recommendation, "serious": v.serious, "prompt": a4.prompt_version,
                    "criteria": {c.id: c.score for c in v.scores}, "issues": v.reasons, "error": v.error,
                    "cost_usd": round(res.cost_usd, 5) if res else 0.0}
             print(f"  {day_id} #{k}  {v.score} {v.badge}  {'; '.join(v.reasons[:1])[:90]}")

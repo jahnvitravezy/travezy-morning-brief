@@ -159,7 +159,8 @@ async def _judge(ctx, brief, rubric, spec, llm, run_id, attempts_left, clock, ru
         failures = run_rule_checks(brief, ctx, rubric)
         run.events.append(f"{spec.id}: failed ({type(e).__name__}) -> rule checks only")
         verdict = Verdict(agent_id=spec.id, rubric_id=rubric.id, rule_failures=failures, reasons=failures,
-                          decision=decide(failures, None, rubric, attempts_left), error=type(e).__name__)
+                          decision=decide(failures, None, rubric, attempts_left), error=type(e).__name__,
+                          recommendation="dont_send" if failures else None)
         res = None
     if res is not None:
         models[spec.id] = res.model
@@ -170,16 +171,18 @@ async def _judge(ctx, brief, rubric, spec, llm, run_id, attempts_left, clock, ru
 
 
 def _better(new: Verdict, old: Verdict) -> bool:
-    """Keep the fix only if it breaks no new rule and doesn't score lower."""
-    if len(new.rule_failures) > len(old.rule_failures):
+    """Keep the fix only if it breaks no new rule, adds no serious error and doesn't score lower."""
+    if len(new.rule_failures) > len(old.rule_failures) or len(new.serious) > len(old.serious):
         return False
+    if len(new.serious) < len(old.serious) and len(new.rule_failures) <= len(old.rule_failures):
+        return True
     if new.score is None or old.score is None:
         return len(new.rule_failures) < len(old.rule_failures) or new.score is not None
     return new.score >= old.score or len(new.rule_failures) < len(old.rule_failures)
 
 
 def _after_last_attempt(v: Verdict, rubric) -> str:
-    if v.rule_failures or (v.score is not None and v.score < rubric.badge.amber):
+    if v.rule_failures or v.serious or (v.score is not None and v.score < rubric.badge.amber):
         return "fallback"
     return "pass"
 

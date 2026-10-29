@@ -31,6 +31,6 @@
   inputs: [ctx.trip_day, out.draft]
   output: out.verdict
   model: openai/gpt-4o-mini
-  prompt_version: judge-v2
+  prompt_version: judge-v3
   rubric: rubric.morning_brief.v1
   timeout_s: 30

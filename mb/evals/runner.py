@@ -85,6 +85,7 @@ async def run_testset(run_id: str, testset: TestSet, s: Services, cfg=None, conc
                    "first_score": run.verdicts[0].score if run.verdicts else None,
                    "criteria": {c.id: c.score for c in (run.verdicts[-1].scores if run.verdicts else [])},
                    "judge_issues": run.verdicts[0].reasons if run.verdicts else [],
+                   "serious": run.verdicts[-1].serious if run.verdicts else [],
                    "events": run.events}
             print(f"  {day.id} {day.trip_id:11} {rec['latency_ms']:>6} ms  ${rec['cost_usd']:.4f}  "
                   f"surprises={rec['surprises']}  judge={rec['verdict']} {rec['score']} {rec['badge']}  "

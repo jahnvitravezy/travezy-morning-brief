@@ -21,6 +21,16 @@ from mb.contracts import (ComposerText, Context, MorningBrief, Notification, Spe
 from mb.llm import LLM, LLMResult, load_prompt
 
 
+def send_at_utc(ctx: Context) -> str:
+    """The local send time where the traveller wakes up, as one UTC instant for the backend."""
+    if not (ctx.send_at_local and ctx.timezone):
+        return ""
+    import datetime as _dt
+    from zoneinfo import ZoneInfo
+    local = _dt.datetime.combine(ctx.date, ctx.send_at_local, tzinfo=ZoneInfo(ctx.timezone))
+    return local.astimezone(_dt.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def brief_id(ctx: Context) -> str:
     return f"brief_{ctx.ctx_id.removeprefix('ctx_')}"
 
@@ -53,7 +63,7 @@ def merge(ctx: Context, summary: Summary, surprises: Surprises | None,
                 if t and not _names_any(t, items) and not (swap and _same_advice(t, swap))), "")
     return MorningBrief(
         brief_id=brief_id(ctx), trip_id=ctx.trip_id, date=ctx.date,
-        send_at_local=f"{ctx.send_at_local:%H:%M}" if ctx.send_at_local else "",
+        send_at_local=f"{ctx.send_at_local:%H:%M}" if ctx.send_at_local else "", send_at_utc=send_at_utc(ctx),
         timezone=ctx.timezone or "",
         notification=Notification(title=(text or s).notification_title, body=(text or s).notification_body),
         timeline=summary.timeline,
@@ -105,7 +115,7 @@ def safe_version(ctx: Context, reason: str) -> MorningBrief:
     title = f"Day {ctx.day.index + 1} in {ctx.region}" if ctx.region else f"Day {ctx.day.index + 1}"
     brief = MorningBrief(
         brief_id=brief_id(ctx), trip_id=ctx.trip_id, date=ctx.date,
-        send_at_local=f"{ctx.send_at_local:%H:%M}" if ctx.send_at_local else "", timezone=ctx.timezone or "",
+        send_at_local=f"{ctx.send_at_local:%H:%M}" if ctx.send_at_local else "", send_at_utc=send_at_utc(ctx), timezone=ctx.timezone or "",
         notification=Notification(title=title[:40], body="Your plan for today"),
         timeline=timeline(ctx), heads_ups=ensure_covered([], ctx), weather=Weather(summary=weather_summary(ctx)),
         spend_estimate=_spend_text(spend(ctx, _fx())), actions=["ask"])
