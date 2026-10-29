@@ -133,3 +133,12 @@ async def test_time_budget_exhausted_gives_the_safe_version(ctx):
 def test_agents_are_found_by_output_in_the_registry():
     cfg = load_config()
     assert pipeline.agent_for(cfg, "out.draft").id == "mb.composer.v1"
+
+
+async def test_fallback_does_not_carry_the_rejected_drafts_badge(ctx):
+    """The safe version is not what was scored, so it gets no score or badge; the draft's score is a flag."""
+    run = await pipeline.run_brief(ctx, load_config(), FakeLLM(judge_scores=(40,)), run_id="t")
+    b = run.brief
+    assert b.meta.judge_verdict == "fallback"
+    assert b.confidence.score is None and b.confidence.badge is None
+    assert any(f.startswith("rejected draft scored") for f in b.confidence.flags)

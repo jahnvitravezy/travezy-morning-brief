@@ -29,3 +29,9 @@ class Services:
         self.routes = GoogleRoutes(self.budget)
         self.providers = [PlacesCandidates(self.places), WebCandidates(Tavily(self.budget))]
         self.llm = LLM(self.budget, self.cfg.models)
+
+
+def briefs_allowed(cfg) -> bool:
+    """The kill switch: app.yaml briefs_enabled: false, or MB_KILL_SWITCH=1, stops every new brief."""
+    import os
+    return cfg.app.briefs_enabled and os.environ.get("MB_KILL_SWITCH", "").lower() not in ("1", "true", "yes")

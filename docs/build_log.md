@@ -135,3 +135,54 @@ First judge-v3 run on the 20 pack briefs: the new serious-error list over-fired.
 2. **"Serious" was too loose.** It must now quote the wrong part of the brief and the input it contradicts; anything in facts_from_code, unpublished-hours advice and differently worded checks are never serious; "if unsure, it's an issue, not serious".
 Real issues the strict judge found and kept: a tip inventing a "Coffee Museum", a tip suggesting snorkelling in the rain, an idea starting at 14:04 (fixed after these briefs were made).
 Gemini flash-lite (15 of 66 judged, free-tier quota) is left out of the export: a judge with failed judgements isn't comparable.
+
+## 29 Oct (evening): finishing the build
+
+- Local tips are checked in code: a tip naming a place not in the plan, the candidates or the
+  region, or using a risky word, or about an item with a weather clash, is replaced by a safe tip.
+- Closing-time heads-ups now always carry an action ("Leave X by HH:MM").
+- Kill switch (`briefs_enabled` / `MB_KILL_SWITCH`), web preview (`/preview/{date}/{trip_id}`),
+  a second rubric (`morning_brief_launch.v1`) and stand-in reviewers (`mb.evals.proxy_review`)
+  for when the Travezy reviewer verdicts are not yet available.
+- Prices re-checked on 29 Oct 2026.
+- Docs: setup guide, design note, architecture diagram, `.env.example`.
+- Tests: 161 passed, 2 skipped.
+
+## 29 Oct (late): fixes from the live test and the stand-in review
+
+- Live `POST /brief` for dubai_up01 fell back: gpt-4o-mini flagged as serious a heads-up telling
+  the traveller to check hours the souks don't publish (the prompt lists this as never serious).
+  Code now confirms every serious error (`confirm_serious`): it must quote the brief, the quote
+  must be in the brief, and it must not be about a computed fact or on the never-serious list.
+  Unconfirmed flags are kept as issues and recorded as `serious_dropped`.
+- A fallback brief no longer carries the rejected draft's score and badge; the draft's score is a flag.
+- The code's late-finish line read like raw check text in B02; it now reads as a heads-up.
+- `agreement --between` measures how much two reviewers agree: the ceiling for any judge.
+- Tests: 165 passed, 2 skipped.
+
+## 30 Oct (00:55): live exchange rates
+
+- The spend line's home-currency figure used a fixed rate from config/fx.yaml (88). It now uses
+  today's live rate (mb/sources/fx.py), fetched once a day and cached; a rate up to 2 days old if
+  the source is down; otherwise no home figure at all. Tests use fixed rates.
+- Cost report rate updated to 95.22 (30 Oct 2026).
+- Tests: 169 passed, 2 skipped.
+
+## 30 Oct (01:20): checks before sending the review pack
+
+- Review export: judgements made before `confirm_serious` existed are re-confirmed with the same rule
+  (no model call), so judge_scores.xlsx follows the code that runs today. On baseline-v5,
+  gpt-4o-mini's briefs with a serious flag went from 39/66 to 4/66: 19 flags quoted nothing from the
+  brief and 17 were on the never-serious list. The three "omissions" among them (JBR heat, Jain line,
+  Monkey Forest closing) were checked by hand: all three were in the briefs. Haiku: 30 -> 30.
+  Dropped flags are listed in a new column, "flags code did not confirm".
+- Tips: a tip may not make a safety claim no source supports ("safe", "perfect for children",
+  "calm waters"). From B18 in the stand-in review.
+- Free windows end 30 minutes before a pickup or transfer at the end of the day, not at it (B18:
+  an idea ran 14:04-15:00 with the airport taxi at 15:00).
+- Cost report: the rate's check date and Google's free allowances are computed from config, not typed.
+- Stand-in agreement on baseline-v5 (20 briefs): the two stand-in reviewers agree with each other on
+  56% of decisions (weighted kappa 0.07, close to chance). Best judge vs Opus: gpt-4o-mini, 55%,
+  kappa 0.21; none of the three judges caught Opus's 4 unsafe briefs (Haiku caught 1). Small sample:
+  the Travezy reviewer's verdicts decide.
+- Tests: 171 passed, 2 skipped.

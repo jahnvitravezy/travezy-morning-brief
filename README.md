@@ -1,58 +1,47 @@
 # Travezy Morning Brief
 
 Travezy's first multi-agent feature (Brief 6). Each morning of a trip, the traveller gets one
-notification with their day, plus two or three things they could add to it. Four agents build
-the brief, an AI judge scores it, and an evaluation framework compares models for production.
+notification with their day, anything they need to know, and two or three things they could add
+to it. Four agents build the brief, an AI judge checks it, and an evaluation framework compares
+models for production.
 
-> Work in progress. The full setup guide and design note are added at the end of the build.
+**Code computes the facts; the models write the words.**
 
-## What runs today
+- Setup and commands: [`docs/setup.md`](docs/setup.md)
+- Design note (decisions, checks, notification controls, privacy, cost): [`docs/design_note.md`](docs/design_note.md)
+- Architecture diagram: [`docs/architecture.html`](docs/architecture.html)
+- Build log with every run and result: [`docs/build_log.md`](docs/build_log.md)
 
-- **Context layer:** one package of facts per trip day (itinerary, trip preferences, time zone,
-  weather, Google Places, travel times, data-quality flags), built once and identified by a `ctx_id`.
-- **Agent 1, Summariser:** headline, heads-ups, weather advice and tip. Timeline and spend are computed in code.
-- **Agent 2, Surprise finder:** picks only from candidates gathered and filtered in code.
-- **Agent 3, Composer:** merges everything into the output contract.
-- **Runner:** Agents 1 and 2 in parallel, timeouts, retries, a time budget and fallbacks (never sends nothing).
-- **API:** `POST /brief`, `GET /health`, `GET /trips`; contract at `/docs`.
-
-Coming next: the judge (Agent 4), the test set, the evaluation framework and the batch runner.
-
-## Quick start (Windows PowerShell)
+## Quick start
 
 ```powershell
-python -m venv .venv
-& .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python -m pytest -q
-```
-
-Keys go in a `.env` file in the project root (never committed):
-
-```
-OPENAI_API_KEY=...
-GOOGLE_MAPS_API_KEY=...
-TAVILY_API_KEY=...
-```
-
-Run the service in Docker:
-
-```powershell
+Copy-Item .env.example .env      # then add your keys
 docker compose up -d --build
 Invoke-RestMethod http://localhost:8000/health
+Start-Process http://localhost:8000/docs
 ```
 
-Then open http://localhost:8000/docs.
+## What's in it
+
+- **Context layer:** one package of facts per trip day (itinerary, preferences, time zone,
+  weather, Google Places, travel times, data-quality flags), built once, identified by a `ctx_id`.
+- **Agents:** Summariser and Surprise finder in parallel, then the Composer. Timeline, spend,
+  clashes and the send time are computed in code.
+- **Judge:** rule checks in code, then scores per criterion and a list of serious errors; code
+  decides send, fix once, or safe fallback. A serious error fails the brief whatever its score.
+- **Evaluation:** fixed test set of 22 days, one role changed at a time, scorecard, judge
+  consistency and self-preference tests, cost report, blind review pack and agreement scoring.
+- **Service:** FastAPI + Postgres outbox, batch runner, web preview, kill switch, budget cap.
 
 ## Layout
 
 | Folder | What's in it |
 |---|---|
-| `config/` | Agent registry, sources, models, rubric, prices, budget and candidate rules |
-| `mb/` | The application: contracts, context, sources, agents, pipeline, API |
+| `config/` | Agent registry, sources, models, rubrics, prices, app settings, test sets |
+| `mb/` | Contracts, context, sources, agents, judge, pipeline, API, batch, evals |
 | `prompts/` | Versioned prompts, one file per version |
-| `data/` | Sample itineraries, trip preferences, weather scenarios |
+| `data/` | Sample itineraries, trips, preferences, weather scenarios |
 | `tests/` | Automated tests, no network or cost |
-| `docs/` | Build log |
+| `docs/` | Setup, design note, architecture, build log |
 
-Model and API usage is capped at INR 5,000 by a budget guard; every paid call is logged.
+Model and API usage is capped by a budget guard; every paid call is logged.

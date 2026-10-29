@@ -28,8 +28,12 @@ from mb.evals.testset import load_testset
 LEDGER = ROOT / "data" / "usage" / "ledger.jsonl"
 
 
+def _app() -> dict:
+    return yaml.safe_load((CONFIG_DIR / "app.yaml").read_text(encoding="utf-8"))
+
+
 def _rate() -> float:
-    return float(yaml.safe_load((CONFIG_DIR / "app.yaml").read_text(encoding="utf-8"))["inr_per_usd"])
+    return float(_app()["inr_per_usd"])
 
 
 def measure(run: str = "cmp-baseline-gpt4o", ledger: Path = LEDGER, runs: Path = RUNS) -> dict:
@@ -58,13 +62,16 @@ def measure(run: str = "cmp-baseline-gpt4o", ledger: Path = LEDGER, runs: Path =
 
 def report(run: str = "cmp-baseline-gpt4o") -> str:
     m, inr = measure(run), _rate()
+    prices = yaml.safe_load((CONFIG_DIR / "prices.yaml").read_text(encoding="utf-8"))
+    free_text_search = 1000 * prices["google_places_text_search"] * inr
+    free_routes = 10000 * prices["google_routes_matrix_element"] * inr
     data = m["data_cold_usd"] or 0.0
     def rs(usd): return f"₹{usd * inr:,.2f}"
     def month(per_day, usd): return f"₹{per_day * 30 * usd * inr:,.0f}"
     lines = [
         "# Morning Brief: cost and time per brief", "",
         f"Measured on the 22-day test set (run `{m['run']}`: GPT-4o for the three writing agents, gpt-4o-mini judge,",
-        f"including fix attempts). 1 USD = ₹{inr:g}. Per-call data prices from config/prices.yaml.", "",
+        f"including fix attempts). 1 USD = ₹{inr:g}{f" (checked {_app().get('inr_per_usd_checked')})" if _app().get("inr_per_usd_checked") else ""}. Per-call data prices from config/prices.yaml.", "",
         "## Per brief", "",
         "| | per brief |", "|---|---|",
         f"| Models (4 agents, incl. judge and fixes) | **{rs(m['model_usd'])}** |",
@@ -85,7 +92,9 @@ def report(run: str = "cmp-baseline-gpt4o") -> str:
               "- Google Places is most of the cost. Travellers on the same itinerary share hotels and sights, so a cache",
               "  shared across travellers (opening hours kept for a few days) should remove most repeat lookups; the cache",
               "  levels above are estimates until measured with real traffic.",
-              "- Google's monthly free usage allowance for the Maps APIs is not deducted here; check it for your account.",
+              "- Prices checked against Google's pricing page on 29 Oct 2026 (Text Search Enterprise $35 per 1,000).",
+              f"  Google's free monthly allowances are not deducted above: 1,000 Text Search Enterprise calls (about ₹{free_text_search:,.0f})",
+              f"  and 10,000 Route Matrix elements (about ₹{free_routes:,.0f}) a month.",
               "- Claude Sonnet in all three writing roles scored the same as GPT-4o but cost about 3.7x as much in models.",
               "- GPT-4.1 mini as Surprise finder scored within noise of GPT-4o at a lower cost (to confirm with the chosen judge)."]
     return "\n".join(lines) + "\n"

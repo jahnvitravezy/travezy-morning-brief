@@ -64,3 +64,22 @@ def test_outbox_lists_prepared_briefs(client, tmp_path):
     assert r == [{"trip_id": "dubai_up01", "date": "2026-11-21", "timezone": "Asia/Dubai", "send_at_local": "07:30",
                   "send_at_utc": "2026-11-21T03:30:00+00:00", "verdict": "pass", "score": 90, "badge": "green",
                   "title": "Day 2 in Dubai"}]
+
+
+def test_kill_switch_stops_new_briefs(client, monkeypatch):
+    monkeypatch.setenv("MB_KILL_SWITCH", "1")
+    assert client.post("/brief", json={"trip_id": "dubai_up01", "date": "2026-11-21"}).status_code == 503
+
+
+def test_preview_renders_a_prepared_brief(client, tmp_path):
+    from mb.agents.composer import safe_version
+    from mb.context import build_context
+    from mb.sources.itinerary import FileLoader
+    from mb.store import FileStore, OutboxItem
+    b = safe_version(build_context(FileLoader().load("dubai_up01"), 1), "t")
+    api.app.state.store = FileStore(tmp_path)
+    api.app.state.store.save(OutboxItem("dubai_up01", "2026-11-21", "Asia/Dubai", "07:30", "2026-11-21T03:30:00Z",
+                                        "pass", 90, "green", b.model_dump(mode="json")))
+    r = client.get("/preview/2026-11-21/dubai_up01")
+    assert r.status_code == 200 and "Day 2 in Dubai" in r.text and "Al Fahidi" in r.text
+    assert client.get("/preview/2026-11-21/nobody").status_code == 404

@@ -11,6 +11,11 @@ and wrong_or_unsafe (yes / no). For each of our judges (data/runs/<run>/judged/*
   cut-offs    the green/amber thresholds that would agree best with the reviewer, from these 20 briefs
               only (a starting point, to confirm on new briefs: 20 is a small sample)
 The judge with the highest kappa is the recommended one.
+
+  python -m mb.evals.agreement --between reviewer_a.xlsx reviewer_b.xlsx
+
+How much two reviewers agree with each other. This is the ceiling: no judge can be expected to
+agree with a reviewer more than two strong reviewers agree with each other.
 """
 from __future__ import annotations
 
@@ -48,6 +53,8 @@ def read_reviewer(path: Path) -> dict[str, dict]:
     out = {}
     for r in rows:
         r = {str(k).strip().lower(): v for k, v in r.items()}
+        if not r.get("decision"):
+            continue
         unsafe = str(r.get("wrong_or_unsafe", r.get("unsafe", "no"))).strip().lower() in ("yes", "y", "true", "1")
         out[str(r["code"]).strip().upper()] = {"decision": norm_decision(r["decision"]), "unsafe": unsafe}
     return out
@@ -96,14 +103,34 @@ def compare(run_id: str, reviewer: dict[str, dict], green: int = 85, amber: int 
     return sorted(rows, key=lambda r: -(r["kappa"] if r["kappa"] is not None else -9))
 
 
+def between(a: dict[str, dict], b: dict[str, dict]) -> dict:
+    """Two reviewers on the same briefs: decision agreement, kappa, and where they split."""
+    codes = sorted(set(a) & set(b))
+    da, db = [a[c]["decision"] for c in codes], [b[c]["decision"] for c in codes]
+    return {"briefs": len(codes),
+            "agreement": f"{sum(x == y for x, y in zip(da, db)) / len(codes):.0%}" if codes else None,
+            "kappa": weighted_kappa(da, db),
+            "unsafe_both": [c for c in codes if a[c]["unsafe"] and b[c]["unsafe"]],
+            "unsafe_only_a": [c for c in codes if a[c]["unsafe"] and not b[c]["unsafe"]],
+            "unsafe_only_b": [c for c in codes if b[c]["unsafe"] and not a[c]["unsafe"]],
+            "decision_splits": [f"{c}: {a[c]['decision']} vs {b[c]['decision']}" for c in codes
+                                if a[c]["decision"] != b[c]["decision"]]}
+
+
 def main(run_id: str, path: str):
     rows = compare(run_id, read_reviewer(Path(path)))
     for r in rows:
         print(r)
     if rows:
         print(f"\nRecommended judge: {rows[0]['judge']} (highest kappa)")
-    (RUNS / run_id / "agreement.json").write_text(json.dumps(rows, indent=1), encoding="utf-8")
+    out = RUNS / run_id / f"agreement__{Path(path).stem}.json"
+    out.write_text(json.dumps(rows, indent=1), encoding="utf-8")
+    print(f"-> {out}")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    if sys.argv[1] == "--between":
+        for k, v in between(read_reviewer(Path(sys.argv[2])), read_reviewer(Path(sys.argv[3]))).items():
+            print(f"{k:16} {v}")
+    else:
+        main(sys.argv[1], sys.argv[2])

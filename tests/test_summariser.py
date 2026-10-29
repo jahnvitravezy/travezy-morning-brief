@@ -121,7 +121,7 @@ def test_pace_checks_catch_late_dinner_and_late_finish():
     from mb.agents.facts import pace_checks
     checks = pace_checks(_bali_rain_ctx())
     assert any(c.startswith("Zest Ubud at 19:30") for c in checks)
-    assert any("ends around 22:30" in c for c in checks)
+    assert any(c.startswith("Long day: you finish around 22:30") for c in checks)
 
 
 def test_departure_flight_is_not_a_late_finish():

@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import json
 
-from mb.agents.facts import (_covers, ensure_covered, spend, suggested_swap, timeline, weather_clashes,
-                             weather_summary)
+from mb.agents.facts import (_covers, ensure_covered, safe_tip, spend, suggested_swap, timeline, tip_problems,
+                             weather_clashes, weather_summary)
 from mb.config import AgentSpec
 from mb.contracts import (ComposerText, Context, MorningBrief, Notification, Spend, Summary, Surprises,
                           Weather)
@@ -60,7 +60,8 @@ def merge(ctx: Context, summary: Summary, surprises: Surprises | None,
     actions = (["add_to_day"] if items else []) + (["swap"] if items or swap else []) + ["ask"]
     heads = [h for h in (text.heads_ups if text else s.heads_ups) if not _names_any(h, items)]
     tip = next((t for t in ((text.local_tip if text else None), s.local_tip)
-                if t and not _names_any(t, items) and not (swap and _same_advice(t, swap))), "")
+                if t and not _names_any(t, items) and not (swap and _same_advice(t, swap))
+                and not tip_problems(t, ctx)), "") or safe_tip(ctx)            # never an invented place
     return MorningBrief(
         brief_id=brief_id(ctx), trip_id=ctx.trip_id, date=ctx.date,
         send_at_local=f"{ctx.send_at_local:%H:%M}" if ctx.send_at_local else "", send_at_utc=send_at_utc(ctx),

@@ -86,7 +86,7 @@ async def test_fix_that_is_worse_is_thrown_away(ctx):
 async def test_red_after_fix_falls_back_to_safe_version(ctx):
     run = await pipeline.run_brief(ctx, CFG, FakeLLM(judge_scores=[40, 45]), run_id="t")
     assert run.brief.meta.judge_verdict == "fallback"
-    assert run.brief.surprises == [] and run.brief.confidence.badge == "red"
+    assert run.brief.surprises == [] and run.brief.confidence.badge is None      # the safe version carries no badge
 
 
 async def test_judge_failure_never_blocks(ctx):
@@ -117,7 +117,7 @@ async def test_serious_error_is_fixed_and_checked_again(ctx):
             if response_model.__name__ == "JudgeOutput":
                 self.judged += 1
                 if self.judged == 1:
-                    res.output.serious = ["Heads-up 1 gives the wrong opening time"]
+                    res.output.serious = ['Body says "Old Dubai, plus 0 ideas" but gives the wrong opening time']
             return res
 
     llm = Serious()
@@ -131,7 +131,7 @@ async def test_serious_error_that_survives_the_fix_sends_the_safe_version(ctx):
         async def call(self, *, response_model, agent_id, **kw):
             res = await super().call(response_model=response_model, agent_id=agent_id, **kw)
             if response_model.__name__ == "JudgeOutput":
-                res.output.serious = ["Sends a Jain family to a kebab house with no warning"]
+                res.output.serious = ['"Old Dubai, plus 0 ideas" sends a Jain family to a kebab house with no warning']
             return res
 
     run = await pipeline.run_brief(ctx, CFG, AlwaysSerious(judge_scores=[95]), run_id="t")
@@ -142,3 +142,35 @@ async def test_serious_error_that_survives_the_fix_sends_the_safe_version(ctx):
 def test_every_brief_carries_its_send_time_in_utc(ctx):
     from mb.agents.composer import safe_version
     assert safe_version(ctx, "x").send_at_utc == "2026-11-21T03:30:00Z"     # 07:30 in Dubai
+
+
+def test_second_rubric_changes_the_judge_without_code():
+    from mb.contracts import MorningBrief, Notification
+    from mb.evals.judge_run import with_rubric
+    from mb.judge.rules import run_rule_checks
+    cfg = with_rubric(CFG, "rubric.morning_brief_launch.v1")
+    launch = cfg.rubrics["rubric.morning_brief_launch.v1"]
+    assert cfg.agents["mb.judge.v1"].rubric == launch.id and launch.judge_model == cfg.agents["mb.judge.v1"].model
+    assert badge_for(88, RUBRIC) == "green" and badge_for(88, launch) == "amber"         # stricter cut-offs
+    assert weighted(scores(accuracy=50), launch) < weighted(scores(accuracy=50), RUBRIC)   # accuracy weighs more
+    c = build_context(FileLoader().load("dubai_up01"), 1)
+    b = MorningBrief(brief_id="b", trip_id="t", date=c.date, send_at_local="07:30",
+                     notification=Notification(title="Day 2 in Dubai: the old town, museum", body="x"),
+                     timeline=[{"time": "09:00", "name": "x"}])
+    assert run_rule_checks(b, c, RUBRIC) == [] and run_rule_checks(b, c, launch)        # 36 characters: passes at 40, fails at 35
+
+
+
+def test_unconfirmed_serious_errors_do_not_fail_a_brief(ctx):
+    """The live false alarm of 29 Oct: no quote, and about hours the venue hasn't published."""
+    from mb.agents.composer import safe_version
+    from mb.judge.judge import confirm_serious
+    brief = safe_version(ctx, "test")
+    brief.notification.body = "Old Dubai and the souks"
+    real = '"Old Dubai and the souks" sends a Jain family to a kebab house: diet is Jain'
+    no_quote = "Heads-up 4 says to check the Gold and Spice Souks' hours, which could confuse"
+    unpublished = '"Old Dubai and the souks" does not say the souks\' hours are not published'
+    made_up = '"Visit the Burj at dawn" is not in the inputs'
+    ok, dropped = confirm_serious([real, no_quote, unpublished, made_up], brief, ctx)
+    assert ok == [real]
+    assert len(dropped) == 3 and all("[not serious:" in d for d in dropped)

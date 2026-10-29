@@ -24,6 +24,7 @@ DAY_START = time(8, 0)
 DAY_END = time(22, 0)
 MIN_WINDOW_MIN = 45
 AIRPORT_BEFORE_MIN = 180              # international flight: check-in, bags, the drive
+READY_BEFORE_MIN = 30                 # back and ready before a pickup or transfer at the end of the day
 ANY_TIME_TYPES = {"beach", "park", "natural_feature", "hiking_area", "marina", "plaza"}
 ANY_TIME_WORDS = ("beach", " bay", "viewpoint")
 
@@ -78,7 +79,7 @@ def free_windows(day: TripDay, prefs: Preferences, min_minutes: int = MIN_WINDOW
             lo = max(lo, _m(stay.end or stay.start))
     j = len(acts) - 1
     while j >= i and acts[j].kind == "move":
-        hi = min(hi, _m(acts[j].start))
+        hi = min(hi, _m(acts[j].start) - READY_BEFORE_MIN)   # an idea must end before the pickup, not at it
         if acts[j].move_mode == "flight":  # be at the airport in time
             hi = min(hi, _m(acts[j].start) - AIRPORT_BEFORE_MIN)
         j -= 1

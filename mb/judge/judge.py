@@ -11,10 +11,16 @@ does the rest, so the decision is reproducible and the thresholds live in the ru
 A serious error (a wrong time, place, price or opening hour; a diet mistake; anything unsafe)
 fails the brief whatever its total score. A fixed brief is judged again before it is sent.
 If the judge model fails, the rule checks still decide, and the brief is never blocked by it.
+
+Code confirms each serious error before it can fail a brief (confirm_serious): it must quote the
+brief, the quote must really be in the brief, and it must not be about a fact code computed or
+on the prompt's "never serious" list. One unconfirmed flag no longer sinks a good brief; it is
+kept as an issue, so the fix loop can still act on it.
 """
 from __future__ import annotations
 
 import json
+import re
 
 from mb.agents.facts import must_cover, suggested_swap, weather_clashes, weather_summary
 from mb.agents.summariser import brief_input
@@ -22,6 +28,36 @@ from mb.config import AgentSpec, Rubric
 from mb.contracts import Context, JudgeOutput, MorningBrief, Verdict
 from mb.judge.rules import run_rule_checks
 from mb.llm import LLM, LLMResult, load_prompt
+
+
+# The prompt's "NOT serious, ever" list, enforced in code (judges don't always follow it).
+NEVER_SERIOUS = ("not published", "unpublished", "aren't published", "are not published", "hours unknown",
+                 "no rain expected", "check the hours", "check hours", "check opening hours")
+QUOTE = re.compile(r"[\"“”‘’']([^\"“”]{6,}?)[\"“”’']")
+
+
+def _norm(t: str) -> str:
+    return re.sub(r"\s+", " ", t.replace("’", "'").replace("‘", "'")).strip().lower()
+
+
+def confirm_serious(serious: list[str], brief: MorningBrief, ctx: Context) -> tuple[list[str], list[str]]:
+    """(confirmed, dropped). A serious error stands only if it quotes the brief word for word and
+    the quote isn't a line code computed (weather line, must-report checks)."""
+    text = _norm(brief.model_dump_json())
+    code_lines = [_norm(weather_summary(ctx))] + [_norm(line) for _, _, line in must_cover(ctx)]
+    confirmed, dropped = [], []
+    for s in serious:
+        low = _norm(s)
+        quotes = [q for q in (_norm(m) for m in QUOTE.findall(s)) if q in text]
+        if any(w in low for w in NEVER_SERIOUS):
+            dropped.append(f"{s} [not serious: on the never-serious list]")
+        elif not quotes:
+            dropped.append(f"{s} [not serious: quotes nothing from the brief]")
+        elif all(any(q in c for c in code_lines) for q in quotes):
+            dropped.append(f"{s} [not serious: about a fact code computed]")
+        else:
+            confirmed.append(s)
+    return confirmed, dropped
 
 
 def candidate_facts(ctx: Context) -> list[dict]:
@@ -106,12 +142,13 @@ async def judge_brief(ctx: Context, brief: MorningBrief, rubric: Rubric, spec: A
                        recommendation=recommendation(failures, [], None, rubric),
                        reasons=failures, error=f"{type(e).__name__}: {str(e)[:200]}"), None
     score = weighted(res.output.scores, rubric)
-    serious = res.output.serious
+    serious, dropped = confirm_serious(res.output.serious, brief, ctx)
     decision = decide(failures, score, rubric, attempts_left, serious)
     return Verdict(agent_id=spec.id, rubric_id=rubric.id, model=res.model, rule_failures=failures,
                    scores=res.output.scores, score=score, badge=badge_for(score, rubric), serious=serious,
-                   recommendation=recommendation(failures, serious, score, rubric),
-                   decision=decision, reasons=failures + serious + res.output.issues), res
+                   serious_dropped=dropped, recommendation=recommendation(failures, serious, score, rubric),
+                   decision=decision, reasons=failures + serious + res.output.issues
+                   + [d.split(" [not serious")[0] for d in dropped]), res
 
 
 def stamp(brief: MorningBrief, v: Verdict) -> MorningBrief:

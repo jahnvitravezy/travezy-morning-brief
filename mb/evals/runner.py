@@ -24,7 +24,7 @@ from mb.contracts import Context
 from mb.evals.testset import TestDay, TestSet, load_testset
 from mb.judge.rules import run_rule_checks
 from mb.llm import preflight
-from mb.pipeline import run_brief
+from mb.pipeline import agent_for, run_brief
 from mb.services import Services
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -62,7 +62,7 @@ async def contexts_for(testset: TestSet, s: Services, rebuild: bool = False) -> 
 async def run_testset(run_id: str, testset: TestSet, s: Services, cfg=None, concurrency: int = 3,
                       rebuild: bool = False) -> list[dict]:
     cfg = cfg or s.cfg
-    rubric = next(r for r in cfg.rubrics.values() if r.use_case == testset.use_case)
+    rubric = cfg.rubrics[agent_for(cfg, "out.verdict").rubric]      # the judge's own rubric
     out_dir = RUNS / run_id
     (out_dir / "briefs").mkdir(parents=True, exist_ok=True)
     contexts = await contexts_for(testset, s, rebuild)
@@ -86,6 +86,7 @@ async def run_testset(run_id: str, testset: TestSet, s: Services, cfg=None, conc
                    "criteria": {c.id: c.score for c in (run.verdicts[-1].scores if run.verdicts else [])},
                    "judge_issues": run.verdicts[0].reasons if run.verdicts else [],
                    "serious": run.verdicts[-1].serious if run.verdicts else [],
+                   "serious_dropped": [d for v in run.verdicts for d in v.serious_dropped],
                    "events": run.events}
             print(f"  {day.id} {day.trip_id:11} {rec['latency_ms']:>6} ms  ${rec['cost_usd']:.4f}  "
                   f"surprises={rec['surprises']}  judge={rec['verdict']} {rec['score']} {rec['badge']}  "

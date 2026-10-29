@@ -22,6 +22,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from mb.config import load_config
+from mb.pipeline import agent_for
 from mb.contracts import Context, MorningBrief
 from mb.evals.runner import CONTEXTS, RUNS, context_index
 from mb.evals.testset import REQUIRED_COVERAGE, load_testset
@@ -162,7 +163,7 @@ def scoring_sheet(codes: list[str], criteria, path: Path) -> None:
 def main(run_id: str):
     cfg = load_config()
     testset = load_testset()
-    rubric = next(r for r in cfg.rubrics.values() if r.use_case == testset.use_case)
+    rubric = cfg.rubrics[agent_for(cfg, "out.verdict").rubric]      # the judge's own rubric
     run_dir = RUNS / run_id
     records = [json.loads(l) for l in (run_dir / "records.jsonl").read_text(encoding="utf-8").splitlines()]
     index = json.loads(context_index(testset).read_text(encoding="utf-8"))

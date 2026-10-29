@@ -32,7 +32,7 @@ def _run(tmp_path):
     rows = [("td.01", 92, []), ("td.02", 70, []), ("td.03", 90, ["wrong opening time"])]
     (run / "judged" / "j.jsonl").write_text("\n".join(json.dumps(
         {"day_id": d, "repeat": 1, "judge_model": "openai/gpt-4o-mini", "score": s, "badge": "green",
-         "recommendation": None, "serious": ser, "criteria": {"accuracy": s}, "prompt": "judge-v3"}) for d, s, ser in rows))
+         "recommendation": None, "serious": ser, "serious_dropped": [], "criteria": {"accuracy": s}, "prompt": "judge-v3"}) for d, s, ser in rows))
     return run
 
 
@@ -82,3 +82,24 @@ def test_judge_and_reviewer_see_what_we_verified_about_each_idea():
                                                        window=w, rating=4.7, travel_min=32, types=["hindu_temple"])]})
     f = candidate_facts(c)[0]
     assert f["rating"] == 4.7 and f["travel_min"] == 32 and f["types"] == ["hindu_temple"]
+
+
+def test_reviewer_contract_and_prompt():
+    from mb.config import load_config
+    from mb.contracts import ReviewerVerdict
+    from mb.llm import load_prompt
+    v = ReviewerVerdict(decision="fix_first", wrong_or_unsafe=False, reasons=["Heads-up 2 is vague"])
+    assert v.decision == "fix_first"
+    assert "independent" in load_prompt("reviewer-v1")
+    assert "anthropic/claude-opus-5-5" in load_config().models
+
+
+def test_two_reviewers_agreement():
+    a = {"B01": {"decision": "send", "unsafe": False}, "B02": {"decision": "fix_first", "unsafe": True},
+         "B03": {"decision": "send", "unsafe": False}}
+    b = {"B01": {"decision": "send", "unsafe": False}, "B02": {"decision": "fix_first", "unsafe": False},
+         "B03": {"decision": "fix_first", "unsafe": True}}
+    r = ag.between(a, b)
+    assert r["briefs"] == 3 and r["agreement"] == "67%"
+    assert r["unsafe_only_a"] == ["B02"] and r["unsafe_only_b"] == ["B03"]
+    assert r["decision_splits"] == ["B03: send vs fix_first"]

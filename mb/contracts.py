@@ -339,6 +339,15 @@ class Verdict(Contract):
     badge: Literal["green", "amber", "red"] | None = None
     decision: Literal["pass", "fix", "fallback"]
     serious: list[str] = []            # the judge's serious errors: each one fails the brief, whatever the score
+    serious_dropped: list[str] = []    # serious errors code didn't confirm (no quote from the brief, or about
+                                       # facts code computed); kept as issues, so they can still be fixed
     recommendation: Literal["send", "fix_first", "dont_send"] | None = None   # comparable with a reviewer
     reasons: list[str] = []            # what to fix (rule failures, serious errors, then the judge's issues)
     error: str | None = None           # why the judge model couldn't score, if it couldn't
+
+
+class ReviewerVerdict(Contract):
+    """An independent reviewer's answer, in the Travezy team's terms."""
+    decision: Literal["send", "fix_first", "dont_send"]
+    wrong_or_unsafe: bool
+    reasons: list[str] = []            # one line each: what is wrong and where; empty if nothing

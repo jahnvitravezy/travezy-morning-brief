@@ -102,3 +102,52 @@ def test_cash_only_must_be_mentioned():
     c = build_context(L.load("dubai_up02"), 1)
     assert any("cash" in h.lower() for h in ensure_covered([], c))
     assert sum("cash" in h.lower() for h in ensure_covered(["Carry AED 1 cash each for the abra."], c)) == 1
+
+
+def test_tip_with_an_unknown_place_or_risky_advice_is_replaced():
+    from mb.agents.facts import safe_tip, tip_problems
+    c = build_context(L.load("dubai_up02"), 1)
+    assert tip_problems("At Al Fahidi, visit the Coffee Museum for a unique experience.", c)
+    assert tip_problems("At Gold and Spice Souks, look for saffron.", c) == []
+    assert tip_problems("Take the steep path down for a closer view.", c)
+    assert safe_tip(c)
+
+
+def test_closing_time_becomes_a_leave_by_action():
+    c = ctx_for("bali_up01", 1)
+    from mb.contracts import Flag
+    forest = next(a for a in c.day.activities if "Monkey" in a.name)
+    c = c.model_copy(update={"flags": [Flag(code="closes_during_visit", activity_id=forest.id,
+                                            message=f"{forest.name}: closes at 17:00, before the planned end at 17:30")]})
+    out = ensure_covered(["Sacred Monkey Forest closes at 17:00, adjust your visit time."], c)
+    assert any(h.startswith("Leave Sacred Monkey Forest Sanctuary by 17:00") for h in out)
+    assert not any("adjust your visit" in h for h in out)
+
+
+def test_late_finish_line_reads_like_a_heads_up():
+    """The code's own line must read naturally if it lands in the brief (B02 showed raw check text)."""
+    import datetime as dt
+    from types import SimpleNamespace as NS
+    from mb.agents.facts import pace_checks
+    act = NS(kind="eat", name="Al Ustad Special Kebab", start=dt.time(20, 15), end=dt.time(21, 15), move_mode=None)
+    pace = NS(dinner_around=None, start_not_before=None, back_by=dt.time(20, 0))
+    ctx = NS(preferences=NS(pace=pace), day=NS(activities=[act]))
+    [line] = pace_checks(ctx)
+    assert line == "Long day: you finish around 21:15 at Al Ustad Special Kebab, later than your usual 20:00 return"
+    assert "after 20:00" not in line
+
+
+def test_tip_with_an_unverifiable_safety_claim_is_replaced():
+    """B18 (stand-in review): 'calm waters perfect for children to swim safely' is a promise no source supports."""
+    from mb.agents.facts import safe_tip, tip_problems
+    ctx = build_context(FileLoader().load("bali_up01"), 2)
+    bad = "Enjoy the calm waters, perfect for children to swim safely."
+    assert any("safety claim" in p for p in tip_problems(bad, ctx))
+    assert not any("safety claim" in p for p in tip_problems(safe_tip(ctx), ctx))
+
+
+def test_ideas_end_before_the_last_pickup_not_at_it():
+    """B18: an idea ran 14:04-15:00 with the airport taxi at 15:00. Windows now end 30 min before it."""
+    trip = FileLoader().load("dubai_up01")
+    day = trip.days[-1]                              # ... JBR Beach 11:00, Taxi 15:00, Flight 18:00
+    assert [w.end for w in free_windows(day, trip.preferences)] == [dt.time(14, 30)]

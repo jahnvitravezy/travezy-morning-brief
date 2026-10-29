@@ -22,8 +22,10 @@ class AppSettings(Strict):
     itinerary_dir: str
     budget_inr: float = Field(gt=0)
     inr_per_usd: float = Field(gt=0)
+    inr_per_usd_checked: str = ""      # the day the rate was checked, shown with every rupee figure
     default_send_local: str = Field(pattern=r"^\d{2}:\d{2}$")
     send_lead_min: int = Field(ge=0)
+    briefs_enabled: bool = True
 
 
 class ModelSpec(Strict):

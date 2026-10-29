@@ -1,6 +1,6 @@
-# Units per 1 USD. APPROXIMATE: update before the final run. The brief labels spend as "about".
+# Units per 1 USD. FIXED rates for tests and evaluation runs only (MB_FX=fixed); briefs use live rates (mb/sources/fx.py).
 USD: 1.0
 AED: 3.6725
-INR: 88.0
+INR: 95.22
 IDR: 16500
 SGD: 1.30

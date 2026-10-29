@@ -141,6 +141,10 @@ async def run_brief(ctx: Context, cfg: Config, llm: LLM, run_id: str,
     if verdict.decision == "fallback":
         run.events.append("judge: fallback -> safe version")
         run.brief = stamp(safe_version(ctx, "judge: " + "; ".join(verdict.reasons[:2])), verdict)
+        # The score and badge belong to the rejected draft, not to the safe version that is sent.
+        if verdict.score is not None:
+            run.brief.confidence.flags.append(f"rejected draft scored {verdict.score}")
+        run.brief.confidence.score, run.brief.confidence.badge = None, None
         run.brief.meta.judge_verdict = "fallback"
         return _finish(run, started, models)
     run.brief = stamp(brief, verdict)

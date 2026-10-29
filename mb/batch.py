@@ -22,7 +22,7 @@ from mb.budget import BudgetExceeded
 from mb.context import build_full_context, send_time, wake_timezone
 from mb.evals.testset import load_testset
 from mb.pipeline import run_brief
-from mb.services import Services
+from mb.services import Services, briefs_allowed
 from mb.store import BriefStore, OutboxItem, get_store
 
 
@@ -62,6 +62,9 @@ def _scenarios() -> dict[tuple[str, dt.date], str]:
 async def run_batch(s: Services, at: dt.datetime, window_min: int, store: BriefStore,
                     plan_only: bool = False, force: bool = False, use_scenarios: bool = True,
                     concurrency: int = 3) -> list[dict]:
+    if not briefs_allowed(s.cfg) and not plan_only:
+        print("Briefs are switched off (kill switch): nothing prepared.")
+        return []
     due = await due_briefs(s, at, window_min)
     scen = _scenarios() if use_scenarios else {}
     sem = asyncio.Semaphore(concurrency)

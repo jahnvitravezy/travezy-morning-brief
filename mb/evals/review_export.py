@@ -36,6 +36,26 @@ def _jsonl(path):
     return [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
 
 
+def reconfirm(run_id: str, rows: list[dict]) -> list[dict]:
+    """Judgements made before code confirmed serious errors (no serious_dropped field): apply the same
+    confirmation now, to the stored judge output, so old and new judgements follow one rule. No model call."""
+    from mb.config import load_config
+    from mb.judge.judge import confirm_serious, recommendation
+    from mb.judge.rules import run_rule_checks
+    todo = [r for r in rows if "serious_dropped" not in r]
+    if not todo:
+        return rows
+    cfg = load_config()
+    index = json.loads(context_index(load_testset()).read_text(encoding="utf-8"))
+    for r in todo:
+        ctx = Context.model_validate_json((CONTEXTS / f"{index[r['day_id']]}.json").read_text(encoding="utf-8"))
+        brief = MorningBrief.model_validate_json((RUNS / run_id / "briefs" / f"{r['day_id']}.json").read_text(encoding="utf-8"))
+        rubric = cfg.rubrics[r.get("rubric") or "rubric.morning_brief.v1"]
+        r["serious"], r["serious_dropped"] = confirm_serious(r.get("serious") or [], brief, ctx)
+        r["recommendation"] = recommendation(run_rule_checks(brief, ctx, rubric), r["serious"], r["score"], rubric)
+    return rows
+
+
 def judge_table(run_id: str) -> dict[str, dict[str, dict]]:
     """judge model -> day_id -> verdict (repeats merged: mean score, majority recommendation)."""
     out: dict[str, dict[str, dict]] = {}
@@ -43,6 +63,7 @@ def judge_table(run_id: str) -> dict[str, dict[str, dict]]:
         rows_all = _jsonl(f)
         if not rows_all or any(r.get("score") is None for r in rows_all):
             continue                    # a judge with failed judgements (quota, errors) isn't comparable
+        rows_all = reconfirm(run_id, rows_all)
         by_day = defaultdict(list)
         for r in rows_all:
             by_day[r["day_id"]].append(r)
@@ -55,6 +76,7 @@ def judge_table(run_id: str) -> dict[str, dict[str, dict]]:
                 "badge": Counter(r["badge"] for r in rows).most_common(1)[0][0],
                 "recommendation": Counter(recs).most_common(1)[0][0] if recs else None,
                 "serious": sorted({s for r in rows for s in r.get("serious") or []}),
+                "serious_dropped": sorted({s for r in rows for s in r.get("serious_dropped") or []}),
                 "criteria": {k: round(st.mean(r["criteria"][k] for r in rows)) for k in rows[0]["criteria"]},
                 "repeats": len(rows), "prompt": rows[0].get("prompt")}
     return out
@@ -82,13 +104,14 @@ def main(run_id: str):
     wb = Workbook()
     ws = wb.active
     ws.title = "Verdicts"
-    head = ["code"] + [f"{m} | {c}" for m in judges for c in ("score", "badge", "recommendation", "serious errors")]
+    head = ["code"] + [f"{m} | {c}" for m in judges for c in ("score", "badge", "recommendation", "serious errors", "flags code did not confirm")]
     ws.append(head)
     for code, k in key.items():
         row = [code]
         for m, days in judges.items():
             v = days.get(k["day_id"], {})
-            row += [v.get("score"), v.get("badge"), v.get("recommendation"), "; ".join(v.get("serious", []))]
+            row += [v.get("score"), v.get("badge"), v.get("recommendation"), "; ".join(v.get("serious", [])),
+                    "; ".join(v.get("serious_dropped", []))]
         ws.append(row)
     crit = wb.create_sheet("Criteria")
     names = next(iter(next(iter(judges.values())).values()))["criteria"] if judges else {}
@@ -100,7 +123,9 @@ def main(run_id: str):
                  "40 several problems or misleading, 20 wrong). Not an accuracy percentage.",
                  "recommendation: send (score >= 85), fix_first (60-84), dont_send (below 60, a rule failure, or a",
                  "serious error). 85 and 60 are placeholders, to be set once the judge is chosen.",
-                 "serious errors: anything that makes the brief wrong or unsafe; any one fails the brief.",
+                 "serious errors: anything that makes the brief wrong or unsafe; any one fails the brief. Code confirms",
+                 "each one first: it must quote the brief word for word and not be about a fact code computed. Flags",
+                 "that fail this are listed under 'flags code did not confirm' and do not change the recommendation.",
                  f"Judge prompts: {', '.join(sorted({d['prompt'] or '?' for j in judges.values() for d in j.values()}))}.",
                  "Each judge scored each brief " + ", ".join(f"{m}: {next(iter(d.values()))['repeats']}x" for m, d in judges.items())
                  + "; repeats are averaged (score) and majority-voted (badge, recommendation)."]:

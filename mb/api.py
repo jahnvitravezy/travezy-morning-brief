@@ -3,6 +3,7 @@
 POST /brief  {trip_id, date, weather_scenario?}  ->  one Morning Brief in the output contract, judged.
 POST /judge  {trip_id, date, weather_scenario?, brief}  ->  the judge's verdict on a given brief.
 GET  /outbox/{date}                              ->  briefs the batch runner prepared for that day.
+GET  /preview/{date}/{trip_id}                   ->  a prepared brief as a phone-sized web page.
 GET  /health                                     ->  liveness and budget status.
 GET  /trips                                      ->  the trips the loader knows.
 Interactive docs (the API contract) are served at /docs.
@@ -13,7 +14,7 @@ import datetime as dt
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from mb.budget import BudgetExceeded
@@ -21,7 +22,7 @@ from mb.context import build_full_context
 from mb.contracts import MorningBrief, Verdict
 from mb.judge.judge import judge_brief
 from mb.pipeline import agent_for, run_brief
-from mb.services import Services
+from mb.services import Services, briefs_allowed
 from mb.store import get_store
 
 
@@ -78,6 +79,8 @@ async def _context(req: BriefRequest):
 @app.post("/brief", response_model=MorningBrief)
 async def brief(req: BriefRequest):
     s: Services = app.state.services
+    if not briefs_allowed(s.cfg):
+        raise HTTPException(503, "Briefs are switched off (kill switch)")
     try:
         ctx = await _context(req)
         run = await run_brief(ctx, s.cfg, s.llm, run_id=f"api-{ctx.ctx_id}")
@@ -105,3 +108,13 @@ async def outbox(date: dt.date):
     """What the batch runner has prepared for a date, in send order."""
     return [{k: v for k, v in vars(i).items() if k != "brief"} | {"title": i.brief["notification"]["title"]}
             for i in app.state.store.for_date(date.isoformat())]
+
+
+@app.get("/preview/{date}/{trip_id}", response_class=HTMLResponse)
+async def preview(date: dt.date, trip_id: str):
+    """How a prepared brief looks to the traveller (for review and demos)."""
+    from mb.preview import render
+    item = next((i for i in app.state.store.for_date(date.isoformat()) if i.trip_id == trip_id), None)
+    if item is None:
+        raise HTTPException(404, f"No prepared brief for {trip_id} on {date}")
+    return HTMLResponse(render(MorningBrief.model_validate(item.brief)))
