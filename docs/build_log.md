@@ -191,3 +191,14 @@ Gemini flash-lite (15 of 66 judged, free-tier quota) is left out of the export: 
   save each brief's exact input (`inputs/<day>.json`) and the export uses it. baseline-v5's inputs were
   rebuilt with the code that wrote it (commit bc6fbb6) and saved; briefs.html, from the stored
   contexts, was already exact.
+
+## 30 Oct: clean-clone test
+
+- Fresh clone from GitHub, one command: built, fetched its own data, wrote a real brief (bali_up04,
+  11 Dec, rain): leave-by line, rain heads-up, live-rate spend, tip from the plan, 2 checked ideas.
+- First brief took 90.0 s: LiteLLM tried to download its price list from GitHub (3 timeouts, ~50 s).
+  Now uses its built-in list (mb/__init__.py), which covers every model we use. Second run: 37.8 s.
+- Known judge limit: gpt-4o-mini reads "Leave X by 17:00: it closes before your planned 17:30
+  finish" as "open until 17:30" and lowers accuracy (64 -> 71 after the fix, amber). The brief is
+  correct. Not changed while the team reviews against judge-v3; candidate fix for judge-v4: closing
+  times as explicit facts.
