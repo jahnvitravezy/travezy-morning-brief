@@ -1,16 +1,23 @@
 # Travezy Morning Brief
 
-Travezy's first multi-agent feature (Brief 6). Each morning of a trip, the traveller gets one
-notification with their day, anything they need to know, and two or three things they could add
-to it. Four agents build the brief, an AI judge checks it, and an evaluation framework compares
-models for production.
+Every morning of a trip, the traveller gets one short message about their day: what's planned,
+anything they should know before they head out, and a couple of things they could add if they
+have time. Tap it, and the full brief opens.
 
-**Code computes the facts; the models write the words.**
+This repository is the service that writes that brief. It's Travezy's first multi-agent feature
+(Brief 6): three agents write the brief, a fourth checks it, and an evaluation framework measures
+which models to use and whether a change made things better or worse.
 
-- Setup and commands: [`docs/setup.md`](docs/setup.md)
-- Design note (decisions, checks, notification controls, privacy, cost): [`docs/design_note.md`](docs/design_note.md)
-- Architecture diagram: [`docs/architecture.html`](docs/architecture.html)
-- Build log with every run and result: [`docs/build_log.md`](docs/build_log.md)
+The idea everything rests on is simple: **code works out the facts, and the models only write
+the words.** Times, travel, opening hours, weather and costs come from real sources and are
+calculated in code, so a brief can't make them up.
+
+## Where to start
+
+- **Run it:** [`docs/setup.md`](docs/setup.md), one command with Docker
+- **Understand it:** [`docs/design_note.md`](docs/design_note.md), the decisions, the checks, cost and what's still open
+- **See it:** [`docs/architecture.html`](docs/architecture.html), how the parts fit together
+- **Follow how it was built:** [`docs/build_log.md`](docs/build_log.md), every run, result, bug and fix, by date
 
 ## Quick start
 
@@ -21,27 +28,36 @@ Invoke-RestMethod http://localhost:8000/health
 Start-Process http://localhost:8000/docs
 ```
 
-## What's in it
+## What's inside
 
-- **Context layer:** one package of facts per trip day (itinerary, preferences, time zone,
-  weather, Google Places, travel times, data-quality flags), built once, identified by a `ctx_id`.
-- **Agents:** Summariser and Surprise finder in parallel, then the Composer. Timeline, spend,
-  clashes and the send time are computed in code.
-- **Judge:** rule checks in code, then scores per criterion and a list of serious errors; code
-  decides send, fix once, or safe fallback. A serious error fails the brief whatever its score.
-- **Evaluation:** fixed test set of 22 days, one role changed at a time, scorecard, judge
-  consistency and self-preference tests, cost report, blind review pack and agreement scoring.
-- **Service:** FastAPI + Postgres outbox, batch runner, web preview, kill switch, budget cap.
+- **One package of facts per trip day**: the itinerary, the trip's preferences, time zone,
+  weather, places, travel times and anything that looks off, gathered once.
+- **Three writing agents**: the Summariser and the Surprise finder work in parallel, then the
+  Composer puts the brief together.
+- **A judge, with code having the final say**: rule checks first, then a score and a list of
+  anything serious. Code decides whether to send, fix once, or fall back to a plain version built
+  only from facts. The traveller never gets nothing.
+- **Checks on every line a model writes**: no invented times, no places we haven't verified, no
+  promises about safety, and no outdoor ideas in the rain or the midday heat.
+- **Evaluation**: a fixed set of 22 trip days, one change at a time, a scorecard, checks on the
+  judge itself, cost reports, and a blind review pack for Travezy's team.
+- **The service**: FastAPI with Postgres, a batch runner that prepares briefs before each
+  traveller's local morning, a phone-style preview, a kill switch and a budget cap.
 
-## Layout
+## Folders
 
-| Folder | What's in it |
+| Folder | What you'll find |
 |---|---|
-| `config/` | Agent registry, sources, models, rubrics, prices, app settings, test sets |
-| `mb/` | Contracts, context, sources, agents, judge, pipeline, API, batch, evals |
-| `prompts/` | Versioned prompts, one file per version |
-| `data/` | Sample itineraries, trips, preferences, weather scenarios |
-| `tests/` | Automated tests, no network or cost |
-| `docs/` | Setup, design note, architecture, build log |
+| `config/` | Which model does what, sources, rubrics, prices, app settings, the test set |
+| `mb/` | The application: contracts, context, sources, agents, judge, pipeline, API, batch, evaluation |
+| `prompts/` | Every prompt version, one file each |
+| `data/` | Sample itineraries, trips, preferences and weather scenarios |
+| `tests/` | Automated tests (no network, no cost) |
+| `docs/` | Setup, design note, architecture and build log |
 
-Model and API usage is capped by a budget guard; every paid call is logged.
+Every paid call goes through a budget guard and is logged.
+
+## Earlier work
+
+Brief 1, the first project in this process:
+[travezy-insight-query](https://github.com/jahnvitravezy/travezy-insight-query).
