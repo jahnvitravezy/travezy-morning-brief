@@ -217,13 +217,17 @@ def access_checks(ctx: Context) -> list[str]:
     p, out = ctx.preferences, []
     for a in ctx.day.activities:
         text = f"{a.name} {a.note}".lower()
-        if not any(w in text for w in ("steep", "stairs", "steps")):
+        steep = any(w in text for w in ("steep", "stairs", "steps"))
+        uneven = "uneven" in text            # Tegallalang: "Outdoor, uneven paths" was missed (B11, B14, v8)
+        if not steep and not uneven:
             continue
         if p.party.children_ages:
             ages = " and ".join(map(str, p.party.children_ages))
-            out.append(f"{a.name}: steep path, keep the children ({ages}) close or skip the climb down")
+            out.append(f"{a.name}: steep path, keep the children ({ages}) close or skip the climb down" if steep
+                       else f"{a.name}: uneven paths, keep the children ({ages}) close and wear good shoes")
         elif p.pace.avoid_steep:
-            out.append(f"{a.name}: steep path, enjoy it from the top instead of climbing down")
+            out.append(f"{a.name}: steep path, enjoy it from the top instead of climbing down" if steep
+                       else f"{a.name}: uneven paths, take it slowly and stay near the viewpoint")
     return out
 
 
@@ -289,7 +293,7 @@ def must_cover(ctx: Context) -> list[tuple[list[str], list[str], str]]:
             out.append((name_words(name), ["earl", "start"], line))
     for line in access_checks(ctx):
         name = next(n for n in acts if line.startswith(n))
-        out.append((name_words(name), ["steep", "stairs", "steps"], line))
+        out.append((name_words(name), ["steep", "stairs", "steps", "uneven"], line))
     out += [(["jain"] if line.startswith("Jain") else ["veg"], [], line) for line in diet_checks(ctx)]  # any Jain / veg line covers it
     out += [(["airport"], ["leave", "by"], line) for line in airport_checks(ctx)]
     out += [(["rain"], ["indoor", "inside", "spa", "shopping", "umbrella"], line) for line in free_day_weather(ctx)]

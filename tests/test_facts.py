@@ -193,3 +193,11 @@ def test_a_dinner_line_with_the_planned_time_covers_the_pace_check():
     ctx = build_context(L.load("bali_up04"), 1)
     heads = ensure_covered(["Book dinner for 19:00 instead of 19:30 to keep to your usual time."], ctx)
     assert not any(h.startswith("Zest Ubud at 19:30") for h in heads)
+
+
+def test_uneven_paths_are_a_heads_up_for_children_and_stair_avoiders():
+    """B11, B14 (v8): the plan says Tegallalang has "uneven paths"; only "steep/stairs/steps" were checked."""
+    kids = access_checks(build_context(L.load("bali_up02"), 1))
+    assert any(l.startswith("Tegallalang Rice Terrace: uneven paths, keep the children") for l in kids)
+    couple = access_checks(build_context(L.load("bali_up04"), 1))
+    assert any(l.startswith("Tegallalang Rice Terrace: uneven paths, take it slowly") for l in couple)

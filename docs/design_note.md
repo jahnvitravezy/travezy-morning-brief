@@ -75,6 +75,33 @@ version built from code is sent instead: **the service never sends nothing.**
    - still failing → send the safe fallback.
 5. A fixed brief is always re-checked before it is sent.
 
+### Code checks on what the models write
+
+Before the judge sees a brief, code checks every line a model wrote. Each check came from a real
+error found in review:
+
+| Check | What it stops | Found in |
+|---|---|---|
+| Times | A heads-up or tip may only state a time from the plan, the free windows, the send time or a code line; any other time drops the line | "Leave Kelingking by 11:16" (should be 11:46) |
+| Must-report facts | Closing times, clashes, diets, steep or uneven paths, cash-only, timed entries, departure transfers: code adds back any the model drops | dropped warnings, 25 Oct |
+| Tips | No place outside the plan or ideas, no risky advice, no safety promise ("safe for children"), no unverifiable claim ("best views at sunset") | stand-in review |
+| Ideas | Only checked candidates; outdoor ideas only in dry, not-too-hot hours; each ends 15 min before they must leave for the next stop or the hotel; descriptions fall back to facts if they overstate the place | water park at 38°C; aquarium into the airport taxi |
+| Counts | The notification's idea count is set by code | "plus 0 ideas for you" |
+
+### Review rounds (stand-in reviewer, same 20 briefs)
+
+| Run | Opus "send as is" | Opus "wrong or unsafe" | gpt-4o-mini agreement (kappa) |
+|---|---|---|---|
+| v5 (sent to Travezy) | 9 | 4 | 55% (0.21) |
+| v6 | 10 | 3 | 50% (−0.03) |
+| v7 | 9 | 7 | 70% (0.40) |
+| v8 | 15 | 3 | 75% (0.44) |
+
+v7 went up because the models began writing their own times in the "Leave X by" style; the time
+check fixed it. Every v8 run: 0 agent failures, 100% rule checks. Its one fallback was correct (a
+travel time written wrongly after the fix step, caught as serious, safe version sent). The stand-in
+reviewer itself varies between runs, so these are trends, not proof; Travezy's reviewer decides.
+
 The thresholds (85 green, 60 amber) are placeholders until they are set against Travezy's
 reviewers. A second rubric (`morning_brief_launch.v1`, green 90, amber 70, stricter lengths and
 weights) shows that rubrics are swapped in config, not code: `--rubric` on the judge run.
@@ -91,7 +118,7 @@ weights) shows that rubrics are swapped in config, not code: `--rubric` on the j
 - **Self-preference test**: the judge did not favour briefs written by its own model family
   (+0.4, +0.5, +3.0 points).
 
-Results: GPT-4o scores 88.3 on average. Every valid alternative was within 2.4 points. GPT-4.1
+Results (model comparison, judge-v2): GPT-4o scores 88.3 on average. Every valid alternative was within 2.4 points. GPT-4.1
 mini is the cheaper candidate for the Surprise finder. An all-Sonnet pipeline gave the same
 quality but was 3× slower and 3.7× the cost. Haiku as Composer often wrote bodies that were too
 long, so it fell back more often. Full numbers are in the scorecard and `docs/build_log.md`.

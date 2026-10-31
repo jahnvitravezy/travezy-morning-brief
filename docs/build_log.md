@@ -245,3 +245,22 @@ Gemini flash-lite (15 of 66 judged, free-tier quota) is left out of the export: 
   - The notification's idea count is set by code ("plus 0 ideas for you", B01).
   - A dinner line with the planned time covers the pace check (no duplicate, B11).
 - Tests: 181 passed, 2 skipped.
+
+## 31 Oct: baseline-v8 (final run before the walkthrough; code frozen after this)
+
+- baseline-v8 (contexts rebuilt): 22/22, 0 agent failures, 100% rules, 7.9 s and $0.0115 per brief,
+  first score 84.5, final 85.7. One fallback, correctly: after the fix step the model wrote "Travel
+  time: Kelingking Beach Viewpoint to Penida Colada is 30 min" (it is 44; 30 is the gap). The judge
+  flagged it as serious, code confirmed the quote, and the traveller got the safe version, which says
+  "about 44 min of travel ... about 14 min late".
+- Opus stand-in: 15 send, 5 fix first (v7: 9 send); unsafe 3 (v7: 7). No invented times, no idea
+  running into the next stop, no "rooftop/beach club" claims. gpt-4o-mini vs Opus: 75% agreement,
+  kappa 0.44, its best (v5 0.21, v6 -0.03, v7 0.40); it still caught 0 of the 3 unsafe briefs.
+- Two of the 3 unsafe flags (B11, B14) had one cause: the plan says Tegallalang has "uneven paths",
+  and the access check only looked for steep/stairs/steps. Fixed: "Tegallalang Rice Terrace: uneven
+  paths, keep the children (6 and 10) close and wear good shoes" / "... take it slowly and stay near
+  the viewpoint". The third (B18) is an idea at lunchtime for a family that rests after lunch: meal and
+  rest times are not modelled yet (known limit).
+- Known limits, unchanged: gpt-4o-mini docks "no rain expected" at a 5% chance and misreads the
+  leave-by line; a minutes figure written by a model is not code-checked (times are).
+- Tests: 182 passed, 2 skipped. Code frozen for the walkthrough except for a wrong time or a safety risk.
