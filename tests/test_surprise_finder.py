@@ -183,3 +183,28 @@ async def test_surprise_slot_starts_when_the_place_opens():
     c = next(c for c in ctx.candidates if c.name == "Night Owl Bar")
     s = validate(ctx, SurprisePicks(picks=[SurprisePick(candidate_id=c.id, why_you="x")]), "a2")
     assert s.items[0].fits_slot.startswith("17:")
+
+
+async def _ctx_weather(nearby, trip_id, day, scenario):
+    places = StubPlaces(nearby)
+    return await build_full_context(FileLoader().load(trip_id), day, StubMeteo(), scenario,
+                                    places=places, routes=StubRoutes(), providers=[PlacesCandidates(places)])
+
+
+async def test_outdoor_ideas_avoid_the_heat():
+    """B18 (stand-in review): a water park was suggested 13:00-15:00 in 38°C. Indoor places still qualify."""
+    nearby = [info("AquaFun Dubai Water Park", types=("water_park",)), info("Cool Mall Cafe", types=("cafe",))]
+    ctx = await _ctx_weather(nearby, "dubai_up02", 3, "dubai_hot_midday")     # departure day, hot 11:00-16:00
+    names = {c.name for c in ctx.candidates}
+    assert "AquaFun Dubai Water Park" not in names
+    assert "Cool Mall Cafe" in names
+
+
+async def test_outdoor_idea_is_shown_only_for_the_dry_hours():
+    """B03: a beach on a free day was offered 10:00-23:30 straight through rain 13:00-17:00."""
+    ctx = await _ctx_weather([info("Double Six Beach", types=("beach",), periods=())], "bali_up03", 2,
+                             "bali_rain_afternoon")
+    c = next(c for c in ctx.candidates if c.name == "Double Six Beach")
+    start = c.open_from or c.window.start
+    assert c.window.end <= dt.time(13, 0)                  # ends when the rain starts
+    assert start < c.window.end

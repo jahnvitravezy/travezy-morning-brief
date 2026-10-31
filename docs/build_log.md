@@ -202,3 +202,24 @@ Gemini flash-lite (15 of 66 judged, free-tier quota) is left out of the export: 
   finish" as "open until 17:30" and lowers accuracy (64 -> 71 after the fix, amber). The brief is
   correct. Not changed while the team reviews against judge-v3; candidate fix for judge-v4: closing
   times as explicit facts.
+
+## 31 Oct: baseline-v6 and fixes from its stand-in review
+
+- baseline-v6 (summariser-v7, composer-v4, judge-v3, stored contexts): 22/22, 0 failures, 0 fallbacks,
+  100% rules, first score 86.5, 10.2 s and $0.0131 per brief. gpt-4o-mini on the same 20 pack briefs,
+  3 repeats: 84.6 (v5) -> 85.0 (v6), badge consistency 86% -> 95%. Opus stand-in: unsafe 4 -> 3;
+  B17 ("children swim safely" tip) and B20 are gone.
+- Opus's v6 findings, fixed in code:
+  - Outdoor ideas ignored heat and were offered across rain (B18 water park at 38°C; B03 beach
+    10:00-23:30 through rain 13:00-17:00). Outdoor candidates now need a dry, not-too-hot visit and are
+    shown only for the good hours (`_good_weather_slot`).
+  - "later than your usual dinner" contains "late", so the long-day line counted as covered (B11).
+    Topic words fixed.
+  - A planned airport taxi meant no departure line at all (B18). Now: "Airport transfer (Taxi) at 15:00
+    for your 18:00 flight: be packed and ready by 14:30".
+  - Vegetarian meals weren't checked in code, only Jain (B04, B06, B11). Now every planned meal not
+    marked vegetarian gets one check line.
+- Not fixed (known limits): idea descriptions can still overstate a place ("beach club" for a
+  restaurant, "sunset views"); gpt-4o-mini still docks "no rain expected" at 5% and misreads the
+  leave-by line. Judge unchanged while the team reviews against judge-v3.
+- Tests: 175 passed, 2 skipped.

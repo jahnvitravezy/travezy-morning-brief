@@ -164,18 +164,51 @@ class PlacesCandidates:
                 continue                                 # hours unknown and not an any-time place
             if "night" in info.name.lower() and start < dt.time(17, 0):
                 continue
-            if RULES.outdoor(info.name, info.types) and _rainy(ctx, start, end):
-                continue
+            window = w
+            if RULES.outdoor(info.name, info.types):
+                good = _good_weather_slot(info, ctx, _m(w.start) + t_in, _m(w.end) - t_out)
+                if good is None:
+                    continue                             # no dry, not-too-hot time while it's open
+                start, until = good
+                window = Window(start=w.start, end=until)   # the idea is shown only for the good hours
             name = clean_name(info.name)
             if ctx.region and name.lower() == ctx.region.lower():
                 continue                                 # "Ubud" is a town, not a place to visit
-            out.append(Candidate(id=f"places:{info.place_id}", provider=self.name, name=name, window=w,
+            out.append(Candidate(id=f"places:{info.place_id}", provider=self.name, name=name, window=window,
                                  place_id=info.place_id,
                                  source_url=f"https://www.google.com/maps/place/?q=place_id:{info.place_id}",
                                  lat=info.lat, lon=info.lon, travel_min=t_in, rating=info.rating,
                                  open_from=start if _m(start) > _m(w.start) + t_in else None,
                                  types=info.types[:5]))
         return sorted(out, key=lambda c: -(c.rating or 0))[:MAX_PER_WINDOW]
+
+
+def _bad_hours(ctx: Context) -> set[int]:
+    """Hours an outdoor idea must avoid: rain likely, or heat (the same thresholds as the weather checks)."""
+    from mb.agents.facts import HOT_C, RAIN_PROB
+    if not ctx.weather or not ctx.weather.hours:
+        return set()
+    return {h.hour.hour for h in ctx.weather.hours if h.rain_prob >= RAIN_PROB or h.temp_c >= HOT_C}
+
+
+def _good_weather_slot(info, ctx: Context, earliest: int, latest_end: int) -> tuple[dt.time, dt.time] | None:
+    """An outdoor idea's slot: the first time it is open with no rain or heat for the whole visit,
+    extended for as long as the weather stays good. A beach on a free day with rain 13:00-17:00 is
+    shown for 10:00-13:00, not 10:00-23:30 (stand-in review, B03/B18, 31 Oct)."""
+    bad = _bad_hours(ctx)
+    t = -(-earliest // 15) * 15
+    while t + VISIT_MIN <= latest_end:
+        hours = set(range(t // 60, (t + VISIT_MIN - 1) // 60 + 1))
+        if not bad & hours and is_open(info, ctx.date, _t(t), _t(t + VISIT_MIN)) is not False:
+            end = t + VISIT_MIN
+            while end < latest_end and (end // 60) not in bad:
+                nxt = min(latest_end, (end // 60 + 1) * 60)
+                if is_open(info, ctx.date, _t(t), _t(nxt)) is False:
+                    break                                # closes before the weather turns
+                end = nxt
+            return _t(t), _t(end)
+        t += 30
+    return None
 
 
 def _first_open(info, ctx: Context, earliest: int, latest_end: int):

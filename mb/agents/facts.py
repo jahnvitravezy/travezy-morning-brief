@@ -195,12 +195,21 @@ def suggested_swap(ctx: Context) -> str | None:
 def diet_checks(ctx: Context) -> list[str]:
     """Jain food rules are stricter than "vegetarian" or "plant-based": every meal needs asking."""
     r = set(ctx.preferences.diet.restrictions)
-    if not r & {"jain", "no_onion", "no_garlic", "no_root_vegetables"}:
-        return []
-    meals = [a.name for a in ctx.day.activities if a.kind == "eat" and "jain" not in a.note.lower()]
-    if not meals:
-        return []
-    return [f"Jain food: ask {' and '.join(meals)} for dishes without onion, garlic or root vegetables"]
+    if r & {"jain", "no_onion", "no_garlic", "no_root_vegetables"}:
+        meals = [a.name for a in ctx.day.activities if a.kind == "eat" and "jain" not in a.note.lower()]
+        if not meals:
+            return []
+        return [f"Jain food: ask {' and '.join(meals)} for dishes without onion, garlic or root vegetables"]
+    if r & {"vegetarian", "vegan"}:
+        # Every planned meal not already marked vegetarian gets a check (stand-in review: B04, B06, B11)
+        word = "vegan" if "vegan" in r else "vegetarian"
+        meals = [a.name for a in ctx.day.activities if a.kind == "eat"
+                 and not any(w in f"{a.name} {a.note}".lower() for w in ("veg", "plant"))]
+        if not meals:
+            return []
+        who = "for the vegetarians in your group" if ctx.preferences.diet.applies_to == "some" else "for you"
+        return [f"{word.capitalize()} food: check {' and '.join(meals)} has {word} dishes {who}"]
+    return []
 
 
 def access_checks(ctx: Context) -> list[str]:
@@ -219,7 +228,8 @@ def access_checks(ctx: Context) -> list[str]:
 
 
 def airport_checks(ctx: Context) -> list[str]:
-    """Departure flight with no transfer planned: say when to leave."""
+    """Departure day: when to leave for the airport, or when to be ready for the planned transfer.
+    A planned taxi used to mean no line at all, so the brief never mentioned the flight (B18)."""
     acts = ctx.day.activities
     flights = [a for a in acts if a.move_mode == "flight"]
     if not ctx.day.is_departure or not flights:
@@ -227,7 +237,10 @@ def airport_checks(ctx: Context) -> list[str]:
     f = flights[-1]
     before = [a for a in acts if a.start < f.start]
     if before and before[-1].kind == "move":          # a taxi or driver to the airport is planned
-        return []
+        t = before[-1]
+        ready = _mins(t.start) - 30
+        return [f"Airport transfer ({t.name}) at {t.start:%H:%M} for your {f.start:%H:%M} flight: "
+                f"be packed and ready by {ready // 60:02d}:{ready % 60:02d}"]
     leave = _mins(f.start) - 180
     return [f"Leave for the airport by {leave // 60:02d}:{leave % 60:02d}: your flight is at {f.start:%H:%M}"]
 
@@ -265,7 +278,8 @@ def must_cover(ctx: Context) -> list[tuple[list[str], list[str], str]]:
     for line in pace_checks(ctx):
         name = next((n for n in acts if line.startswith(n)), None)
         if line.startswith("Long day"):
-            out.append(([], ["ends", "late", "back at", "back by", "return", "long day"], line))
+            # not "late": it matches "later than your usual dinner" and hid a missing long-day line (B11)
+            out.append(([], ["long day", "ends", "ending", "finish", "back at", "back by", "late return"], line))
         elif name and "dinner" in line:
             out.append((name_words(name), ["dinner", "19:", "18:", "earlier"], line))
         elif name:
@@ -273,7 +287,7 @@ def must_cover(ctx: Context) -> list[tuple[list[str], list[str], str]]:
     for line in access_checks(ctx):
         name = next(n for n in acts if line.startswith(n))
         out.append((name_words(name), ["steep", "stairs", "steps"], line))
-    out += [(["jain"], [], line) for line in diet_checks(ctx)]          # any Jain line covers it
+    out += [(["jain"] if line.startswith("Jain") else ["veg"], [], line) for line in diet_checks(ctx)]  # any Jain / veg line covers it
     out += [(["airport"], ["leave", "by"], line) for line in airport_checks(ctx)]
     out += [(["rain"], ["indoor", "inside", "spa", "shopping", "umbrella"], line) for line in free_day_weather(ctx)]
     for a in ctx.day.activities:

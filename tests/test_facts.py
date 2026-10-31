@@ -44,7 +44,8 @@ def test_departure_day_ends_three_hours_before_the_flight():
     c = build_context(L.load("bali_up02"), 4)                   # flight 16:00, no transfer planned
     assert all(w.end <= dt.time(13, 0) for w in c.free_windows)   # 12:30-13:00 is too short to use
     assert airport_checks(c) == ["Leave for the airport by 13:00: your flight is at 16:00"]
-    assert airport_checks(build_context(L.load("dubai_up01"), 3)) == []   # taxi already planned
+    assert airport_checks(build_context(L.load("dubai_up01"), 3)) == [      # taxi planned: say when to be ready
+        "Airport transfer (Taxi) at 15:00 for your 18:00 flight: be packed and ready by 14:30"]
 
 
 def test_arrival_day_has_no_free_time_before_check_in():
@@ -55,7 +56,9 @@ def test_arrival_day_has_no_free_time_before_check_in():
 def test_jain_meals_and_steep_paths_for_children():
     c = build_context(L.load("bali_up02"), 1)                   # Jain family, Clear Cafe and Zest
     assert "Clear Cafe and Zest Ubud" in diet_checks(c)[0]
-    assert diet_checks(build_context(L.load("bali_up01"), 1)) == []
+    veg = diet_checks(build_context(L.load("bali_up01"), 1))         # vegetarian couple: every meal checked
+    assert veg and veg[0].startswith("Vegetarian food: check") and veg[0].endswith("for you")
+    assert diet_checks(build_context(L.load("dubai_up03"), 1)) == []  # eats everything
     k = build_context(L.load("bali_up02"), 3)                   # Kelingking: steep path, kids 6 and 10
     assert "children (6 and 10)" in access_checks(k)[0]
 
@@ -151,3 +154,11 @@ def test_ideas_end_before_the_last_pickup_not_at_it():
     trip = FileLoader().load("dubai_up01")
     day = trip.days[-1]                              # ... JBR Beach 11:00, Taxi 15:00, Flight 18:00
     assert [w.end for w in free_windows(day, trip.preferences)] == [dt.time(14, 30)]
+
+
+
+def test_a_dinner_line_does_not_count_as_the_long_day_line():
+    """B11: "later than your usual dinner" contains "late", so the missing long-day line was never added."""
+    ctx = build_context(FileLoader().load("bali_up04"), 1)
+    heads = ensure_covered(["Zest Ubud at 19:30: later than your usual dinner around 19:00"], ctx)
+    assert any(h.startswith("Long day") for h in heads)
