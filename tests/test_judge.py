@@ -117,7 +117,7 @@ async def test_serious_error_is_fixed_and_checked_again(ctx):
             if response_model.__name__ == "JudgeOutput":
                 self.judged += 1
                 if self.judged == 1:
-                    res.output.serious = ['Body says "Old Dubai, plus 0 ideas" but gives the wrong opening time']
+                    res.output.serious = ['Body says "Old Dubai and the souks" but gives the wrong opening time']
             return res
 
     llm = Serious()
@@ -131,7 +131,7 @@ async def test_serious_error_that_survives_the_fix_sends_the_safe_version(ctx):
         async def call(self, *, response_model, agent_id, **kw):
             res = await super().call(response_model=response_model, agent_id=agent_id, **kw)
             if response_model.__name__ == "JudgeOutput":
-                res.output.serious = ['"Old Dubai, plus 0 ideas" sends a Jain family to a kebab house with no warning']
+                res.output.serious = ['"Old Dubai and the souks" sends a Jain family to a kebab house with no warning']
             return res
 
     run = await pipeline.run_brief(ctx, CFG, AlwaysSerious(judge_scores=[95]), run_id="t")

@@ -24,6 +24,7 @@ from mb.sources.tavily import Tavily
 
 WALK_KMH = 4.5
 WALK_MAX_KM = 1.2            # beyond this, assume a taxi
+BUFFER_MIN = 15              # an idea ends 15 min before they must leave for the next stop (B04, v7)
 FOOD_WORDS = ("cafe", "restaurant", "food", "dining", "tea", "dessert", "bakery")
 
 
@@ -102,6 +103,17 @@ def _coords(ctx: Context, a: Activity | None) -> tuple[float, float] | None:
     return (info.lat, info.lon) if info and info.lat is not None else None
 
 
+def next_for(ctx: Context, after: Activity | None) -> tuple[float, float] | None:
+    """Where the traveller must be at the end of a window: the next stop; for a pickup or transfer with
+    no place of its own (the airport taxi), their hotel. The idea must leave time to get back (B18, v7)."""
+    pt = _coords(ctx, after)
+    if pt is None and after is not None and after.kind == "move":
+        wake = ctx.places.get("wake")
+        if wake and wake.lat is not None:
+            return wake.lat, wake.lon
+    return pt
+
+
 def here_for(ctx: Context, before: Activity | None, after: Activity | None):
     """Where the traveller is at the start of a window: the stop before it; else their hotel
     (not on arrival day, when they wake up at home); else the next stop. Returns (name, coords)."""
@@ -130,7 +142,7 @@ class PlacesCandidates:
     async def candidates(self, ctx: Context, w: Window, run_id: str) -> list[Candidate]:
         before, after = anchors(ctx, w)
         here_name, here = here_for(ctx, before, after)
-        nxt = _coords(ctx, after)
+        nxt = next_for(ctx, after)
         if not here:
             return []                                    # we don't know where they are: suggest nothing
         # Search near where they are; if the next stop is far, also near the next stop
@@ -155,18 +167,19 @@ class PlacesCandidates:
                 continue
             t_in = travel_minutes(here, (info.lat, info.lon))
             t_out = travel_minutes((info.lat, info.lon), nxt) if nxt else 0
-            if t_in + VISIT_MIN + t_out > length:
-                continue                                 # doesn't fit the window, travel included
-            start, end, open_ = _first_open(info, ctx, _m(w.start) + t_in, _m(w.end) - t_out)
+            if t_in + VISIT_MIN + t_out + BUFFER_MIN > length:
+                continue                                 # doesn't fit the window, travel and buffer included
+            leave_by = _m(w.end) - t_out - BUFFER_MIN    # the idea ends in time to reach the next stop
+            start, end, open_ = _first_open(info, ctx, _m(w.start) + t_in, leave_by)
             if open_ is False:
                 continue                                 # closed for the whole window
             if open_ is None and not RULES.hours_optional_types & set(info.types):
                 continue                                 # hours unknown and not an any-time place
             if "night" in info.name.lower() and start < dt.time(17, 0):
                 continue
-            window = w
+            window = Window(start=w.start, end=_t(leave_by))
             if RULES.outdoor(info.name, info.types):
-                good = _good_weather_slot(info, ctx, _m(w.start) + t_in, _m(w.end) - t_out)
+                good = _good_weather_slot(info, ctx, _m(w.start) + t_in, leave_by)
                 if good is None:
                     continue                             # no dry, not-too-hot time while it's open
                 start, until = good

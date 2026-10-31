@@ -162,3 +162,34 @@ def test_a_dinner_line_does_not_count_as_the_long_day_line():
     ctx = build_context(FileLoader().load("bali_up04"), 1)
     heads = ensure_covered(["Zest Ubud at 19:30: later than your usual dinner around 19:00"], ctx)
     assert any(h.startswith("Long day") for h in heads)
+
+
+def test_a_time_the_model_made_up_is_dropped():
+    """B01 (v7): "Leave Kelingking by 11:16" was the model's own (wrong) arithmetic."""
+    from mb.agents.facts import tip_problems, unknown_times
+    ctx = build_context(L.load("bali_up04"), 3)                  # Nusa Penida: Kelingking 10:00-12:00, lunch 12:30
+    assert unknown_times("Leave Kelingking Beach Viewpoint by 11:16 to reach Penida Colada on time.", ctx) == ["11:16"]
+    assert unknown_times("Lunch at Penida Colada is at 12:30.", ctx) == []
+    assert any("time nothing gave it" in p for p in tip_problems("Leave Kelingking by 11:16 for lunch.", ctx))
+
+
+def test_unverifiable_place_claims_are_caught():
+    from mb.agents.facts import unverified_claims
+    assert unverified_claims("Close by, great for rooftop dining") == ["rooftop"]
+    assert unverified_claims("Great rooftop views", support="Sky Rooftop Bar") == []
+    assert unverified_claims("A quiet garden near your stop") == []
+
+
+def test_the_idea_count_in_the_notification_is_a_fact():
+    from mb.agents.facts import fix_idea_count
+    assert fix_idea_count("Explore Kelingking, plus 0 ideas for you.", 0) == "Explore Kelingking."
+    assert fix_idea_count("Explore Ubud, plus 3 ideas for you.", 2) == "Explore Ubud, plus 2 ideas for you."
+    assert fix_idea_count("Explore Ubud, plus 1 idea for you.", 1) == "Explore Ubud, plus 1 idea for you."
+    assert fix_idea_count("Your day in Ubud.", 2) == "Your day in Ubud."
+
+
+def test_a_dinner_line_with_the_planned_time_covers_the_pace_check():
+    """B11 (v7): "Book dinner for 19:00 instead of 19:30" plus the code's own line said the same thing twice."""
+    ctx = build_context(L.load("bali_up04"), 1)
+    heads = ensure_covered(["Book dinner for 19:00 instead of 19:30 to keep to your usual time."], ctx)
+    assert not any(h.startswith("Zest Ubud at 19:30") for h in heads)

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 
 from mb.config import AgentSpec
+from mb.agents.facts import unverified_claims
 from mb.contracts import Context, SurpriseItem, SurprisePicks, Surprises
 from mb.llm import LLM, LLMResult, load_prompt
 
@@ -30,6 +31,13 @@ def finder_input(ctx: Context) -> str:
     }, indent=1, ensure_ascii=False)
 
 
+def plain_why(c) -> str:
+    """A description built only from verified facts, when the model's overstates the place."""
+    kind = next((t.replace("_", " ") for t in c.types if t not in ("point_of_interest", "establishment")), "place")
+    bits = [f"A {kind}"] + ([f"rated {c.rating:.1f}"] if c.rating else [])
+    return ", ".join(bits) + (f", {c.travel_min} min away" if c.travel_min else "") + ", open in this slot."
+
+
 def validate(ctx: Context, picks: SurprisePicks, agent_id: str) -> Surprises:
     """Code checks on the model's choices: real candidate, one per slot, at most three."""
     by_id = {c.id: c for c in ctx.candidates}
@@ -39,7 +47,7 @@ def validate(ctx: Context, picks: SurprisePicks, agent_id: str) -> Surprises:
         if c is None:
             dropped.append(f"{pick.candidate_id}: not in the candidate list")
             continue
-        slot = f"{c.window.start:%H:%M}-{c.window.end:%H:%M}"
+        slot = f"{c.window.start:%H:%M}"                # one idea per free window (each idea's end differs)
         if slot in used_slots:
             dropped.append(f"{c.name}: a surprise is already in {slot}")
             continue
@@ -47,8 +55,11 @@ def validate(ctx: Context, picks: SurprisePicks, agent_id: str) -> Surprises:
             dropped.append(f"{c.name}: more than {MAX_SURPRISES} surprises")
             continue
         used_slots.add(slot)
-        shown = f"{c.open_from:%H:%M}-{c.window.end:%H:%M}" if c.open_from else slot   # from when it opens
-        items.append(SurpriseItem(name=c.name, why_you=pick.why_you.strip(), fits_slot=shown,
+        shown = f"{(c.open_from or c.window.start):%H:%M}-{c.window.end:%H:%M}"   # from when it opens
+        why = pick.why_you.strip()
+        if unverified_claims(why, support=f"{c.name} {' '.join(c.types)} {c.snippet}"):
+            why = plain_why(c)                           # "rooftop dining" for a cafe: say only what we know
+        items.append(SurpriseItem(name=c.name, why_you=why, fits_slot=shown,
                                   distance_min=c.travel_min, source_url=c.source_url, place_id=c.place_id))
     none_reason = picks.none_reason if not items else None
     return Surprises(agent_id=agent_id, items=items, none_reason=none_reason, dropped=dropped)

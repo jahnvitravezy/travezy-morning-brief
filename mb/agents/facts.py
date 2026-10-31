@@ -281,7 +281,10 @@ def must_cover(ctx: Context) -> list[tuple[list[str], list[str], str]]:
             # not "late": it matches "later than your usual dinner" and hid a missing long-day line (B11)
             out.append(([], ["long day", "ends", "ending", "finish", "back at", "back by", "late return"], line))
         elif name and "dinner" in line:
-            out.append((name_words(name), ["dinner", "19:", "18:", "earlier"], line))
+            # covered by any dinner line that mentions the planned time ("Book dinner for 19:00 instead of
+            # 19:30"); the restaurant's name used to be required, which duplicated the line (B11)
+            start = next(a.start for a in ctx.day.activities if a.name == name)
+            out.append((["dinner"], [f"{start:%H:%M}"], line))
         elif name:
             out.append((name_words(name), ["earl", "start"], line))
     for line in access_checks(ctx):
@@ -328,10 +331,57 @@ def leave_by_line(ctx: Context, flag) -> str:
 
 
 # ---------- The local tip: only places we know about, no risky advice ----------
+# Claims about a place that no source we use can confirm (stand-in review, v6-v7: "rooftop dining",
+# "beach club" for a restaurant, "best views from the north side at sunset", "close to hotel").
+CLAIM_WORDS = ("rooftop", "beach club", "sunset", "best ", "secluded", "hidden", "thrilling", "stunning",
+               "must-see", "famous", "north side", "close to hotel", "close to your", "near your hotel")
+
+
+def unverified_claims(text: str, support: str = "") -> list[str]:
+    """Claim words in a line, unless the place's own name or type supports them ("X Rooftop Bar")."""
+    low, sup = f" {text.lower()} ", support.lower()
+    return [c for c in CLAIM_WORDS if c in low and c.strip() not in sup]
+
+
 TIP_RISK_WORDS = ("steep", "even if it rains", "even if it's raining", "in the rain", "despite the rain", "midday sun")
 # Safety promises we can't verify from any source: a tip may not say a place is safe for anyone.
 SAFETY_CLAIMS = (r"\bsafe(ly)?\b", r"\bperfect for (kids|children)\b", r"\b(kid|child)[- ]friendly\b",
                  r"\bcalm waters?\b", r"\bno risk\b", r"\bguaranteed\b")
+
+
+# ---------- Times: a model may only repeat a time code or the plan already has ----------
+_TIME = __import__("re").compile(r"\b([01]?\d|2[0-3])[:.]([0-5]\d)\b")
+
+
+def _hhmm(text: str) -> set[str]:
+    return {f"{int(h):02d}:{m}" for h, m in _TIME.findall(text)}
+
+
+def known_times(ctx: Context) -> set[str]:
+    """Every time the brief may state: the plan, the free windows, the send time, and every line code wrote."""
+    out = set()
+    for a in ctx.day.activities:
+        out |= {f"{t:%H:%M}" for t in (a.start, a.end, a.timed_at) if t}
+    for w in ctx.free_windows:
+        out |= {f"{w.start:%H:%M}", f"{w.end:%H:%M}"}
+    if ctx.send_at_local:
+        out.add(f"{ctx.send_at_local:%H:%M}")
+    p = ctx.preferences.pace
+    out |= {f"{t:%H:%M}" for t in (p.dinner_around, p.start_not_before, p.back_by) if t}
+    code_text = [weather_summary(ctx), *weather_clashes(ctx), *(line for _, _, line in must_cover(ctx))]
+    code_text += [suggested_swap(ctx) or ""] + [f.message for f in ctx.flags]
+    for c in ctx.candidates:
+        code_text.append(f"{(c.open_from or c.window.start):%H:%M}-{c.window.end:%H:%M}")
+    for line in code_text:
+        out |= _hhmm(line)
+    return out
+
+
+def unknown_times(text: str, ctx: Context) -> list[str]:
+    """Times in a model's line that nothing gave it. "Leave Kelingking by 11:16" (B01, v7) was the model's
+    own arithmetic, and wrong; the plan said 12:30 and code had the travel time."""
+    known = known_times(ctx)
+    return sorted(t for t in _hhmm(text) if t not in known)
 
 
 def known_names(ctx: Context) -> set[str]:
@@ -355,6 +405,8 @@ def tip_problems(tip: str, ctx: Context) -> list[str]:
     out += [f"tip advises '{r}'" for r in TIP_RISK_WORDS if r in low]
     out += [f"tip makes a safety claim we can't verify ('{m.group(0)}')" for p in SAFETY_CLAIMS
             if (m := re.search(p, low))]
+    out += [f"tip uses a time nothing gave it ({t})" for t in unknown_times(tip, ctx)]
+    out += [f"tip makes a claim we can't verify ('{c.strip()}')" for c in unverified_claims(tip)]
     clash = {c.split(" ")[0].lower() for c in weather_clashes(ctx)}
     for a in ctx.day.activities:
         if any(c.startswith(f"{a.name} ") for c in weather_clashes(ctx)) and a.name.lower() in low:
@@ -377,3 +429,15 @@ def safe_tip(ctx: Context) -> str:
         if hottest >= 30:
             return f"Carry water and sun cover: it reaches {hottest:.0f}°C today."
     return "Keep a copy of today's bookings on your phone in case you lose signal."
+
+
+def fix_idea_count(body: str, n: int) -> str:
+    """The notification counts the ideas the brief really has. "plus 0 ideas for you" (B01, v7) was a
+    model filling a template; the count is a fact, so code sets it."""
+    import re
+    pat = re.compile(r"[,;]?\s*(?:and|plus|\+)\s+(?:\d+|one|two|three|no)\s+ideas?(?:\s+for\s+you)?", re.I)
+    if not pat.search(body):
+        return body
+    repl = "" if n == 0 else f", plus {n} idea{'s' if n > 1 else ''} for you"
+    out = pat.sub(repl, body, count=1)
+    return re.sub(r"\s+([.,!])", r"\1", out).strip()

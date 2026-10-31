@@ -223,3 +223,25 @@ Gemini flash-lite (15 of 66 judged, free-tier quota) is left out of the export: 
   restaurant, "sunset views"); gpt-4o-mini still docks "no rain expected" at 5% and misreads the
   leave-by line. Judge unchanged while the team reviews against judge-v3.
 - Tests: 175 passed, 2 skipped.
+
+## 31 Oct: baseline-v7 (contexts rebuilt) and the fixes from its review
+
+- baseline-v7: 22/22, 0 failures, 0 fallbacks, 100% rules, 8.3 s and $0.0114 per brief. First score
+  83.5 (v6 86.5): the brief now carries more code lines (vegetarian checks, transfer line) and the
+  judge's known misreadings remain; gpt-4o-mini vs Opus agreement 70%, kappa 0.40 (v6 -0.03).
+- Opus stand-in flagged 7 unsafe (v6: 3). Read one by one, 5 were real, and the worst were the models
+  writing their own times in our "Leave X by HH:MM" style, wrongly: "Leave Kelingking by 11:16"
+  (should be 11:46), "Depart Penida Colada by 13:01", tips "Leave Al Fahidi by 11:00", "Leave the
+  souks by 14:30". Fixes, all in code:
+  - Time check: a heads-up or tip may only state a time from the plan, the free windows, the send time
+    or a line code wrote (`known_times`, `unknown_times`). A line with any other time is dropped (the
+    code's own line is added back if needed); a tip with one is replaced.
+  - Idea slots end 15 min before they must leave, with travel to the next stop, or to the hotel when
+    the next item is a pickup (B18 aquarium until 14:30 with the taxi at 15:00; B04 16:26 + 32 min for
+    a booked 17:00 entry). One idea per free window.
+  - Idea descriptions and tips may not claim what no source confirms ("rooftop dining", "beach club",
+    "close to hotel", "best views at sunset", "thrilling"); an idea's description falls back to facts:
+    "A cafe, rated 4.4, 9 min away, open in this slot."
+  - The notification's idea count is set by code ("plus 0 ideas for you", B01).
+  - A dinner line with the planned time covers the pace check (no duplicate, B11).
+- Tests: 181 passed, 2 skipped.

@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import json
 
-from mb.agents.facts import (_covers, ensure_covered, safe_tip, spend, suggested_swap, timeline, tip_problems,
+from mb.agents.facts import (_covers, ensure_covered, fix_idea_count, safe_tip, spend, suggested_swap, timeline,
+                             tip_problems, unknown_times,
                              weather_clashes, weather_summary)
 from mb.config import AgentSpec
 from mb.contracts import (ComposerText, Context, MorningBrief, Notification, Spend, Summary, Surprises,
@@ -58,7 +59,8 @@ def merge(ctx: Context, summary: Summary, surprises: Surprises | None,
     swap = suggested_swap(ctx)                                              # code picks the time
     clashes = weather_clashes(ctx)
     actions = (["add_to_day"] if items else []) + (["swap"] if items or swap else []) + ["ask"]
-    heads = [h for h in (text.heads_ups if text else s.heads_ups) if not _names_any(h, items)]
+    heads = [h for h in (text.heads_ups if text else s.heads_ups)
+             if not _names_any(h, items) and not unknown_times(h, ctx)]       # no time the model made up
     tip = next((t for t in ((text.local_tip if text else None), s.local_tip)
                 if t and not _names_any(t, items) and not (swap and _same_advice(t, swap))
                 and not tip_problems(t, ctx)), "") or safe_tip(ctx)            # never an invented place
@@ -66,7 +68,8 @@ def merge(ctx: Context, summary: Summary, surprises: Surprises | None,
         brief_id=brief_id(ctx), trip_id=ctx.trip_id, date=ctx.date,
         send_at_local=f"{ctx.send_at_local:%H:%M}" if ctx.send_at_local else "", send_at_utc=send_at_utc(ctx),
         timezone=ctx.timezone or "",
-        notification=Notification(title=(text or s).notification_title, body=(text or s).notification_body),
+        notification=Notification(title=(text or s).notification_title,
+                                  body=fix_idea_count((text or s).notification_body, len(items))),
         timeline=summary.timeline,
         weather=Weather(summary=weather_summary(ctx), clash=clashes[0] if clashes else None, suggested_swap=swap),
         heads_ups=ensure_covered(heads, ctx),

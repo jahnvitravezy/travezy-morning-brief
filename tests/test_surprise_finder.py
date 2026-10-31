@@ -208,3 +208,25 @@ async def test_outdoor_idea_is_shown_only_for_the_dry_hours():
     start = c.open_from or c.window.start
     assert c.window.end <= dt.time(13, 0)                  # ends when the rain starts
     assert start < c.window.end
+
+
+async def test_idea_ends_in_time_to_get_back_for_the_airport_taxi():
+    """B18 (v7): an aquarium 29 min away was shown until 14:30, the time they had to be ready for the taxi.
+    Travel there and back plus a 15-min buffer no longer fits the 13:00-14:30 window; a nearby place does,
+    and it ends 15 min before they must be back."""
+    far = info("Lost World Aquarium", lat=25.26, lon=55.30, types=("aquarium",))          # ~7 km from the hotel
+    near = info("Marina Cafe", types=("cafe",))
+    ctx = await _ctx_weather([far, near], "dubai_up02", 3, "dubai_clear_warm")
+    names = {c.name: c for c in ctx.candidates}
+    assert "Lost World Aquarium" not in names
+    assert names["Marina Cafe"].window.end <= dt.time(14, 15)
+
+
+async def test_an_overstated_description_is_replaced_with_facts():
+    """B03/B09 (v7): "great for rooftop dining" for a cafe; "thrilling adventure" for a playground."""
+    ctx = await _ctx([info("Arabian Tea House", types=("cafe",), rating=4.4)])
+    c = next(c for c in ctx.candidates if c.name == "Arabian Tea House")
+    s = validate(ctx, SurprisePicks(picks=[SurprisePick(candidate_id=c.id, why_you="Great for rooftop dining.")]), "a2")
+    assert "rooftop" not in s.items[0].why_you and s.items[0].why_you.startswith("A cafe, rated 4.4")
+    ok = validate(ctx, SurprisePicks(picks=[SurprisePick(candidate_id=c.id, why_you="Mint tea by the creek.")]), "a2")
+    assert ok.items[0].why_you == "Mint tea by the creek."
