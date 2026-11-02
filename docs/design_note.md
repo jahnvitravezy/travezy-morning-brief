@@ -136,6 +136,13 @@ finder. Claude Sonnet in every role matched the quality but was three times slow
 the cost. Claude Haiku as the Composer kept writing notifications that were too long. The full
 numbers are in the scorecard and `docs/build_log.md`.
 
+**Asking questions about the runs**: every run's scores, verdicts, response time and tokens go
+into one table (`python -m mb.evals.export_runs`, one row per brief per run), which the Brief 1
+insight tool loads as `analytics.brief_runs`. So "Which model failed most often on arrival days?"
+can be asked in plain English. Today's answer: Claude Haiku as the Composer, 3 of its 9 arrival
+briefs (33.3%), all for notifications that were too long; every other model failed none. The tool
+says these are test runs, not travellers, and leaves out the invalid Gemini runs.
+
 **Choosing the judge for production**: Travezy's team is scoring the 20 briefs blind with a
 stronger reviewer. `python -m mb.evals.agreement` then compares each of our judges with their
 verdicts (agreement, weighted kappa, unsafe briefs caught, false alarms, best pass marks), and the

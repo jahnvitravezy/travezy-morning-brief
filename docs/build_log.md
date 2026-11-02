@@ -264,3 +264,19 @@ Gemini flash-lite (15 of 66 judged, free-tier quota) is left out of the export: 
 - Known limits, unchanged: gpt-4o-mini docks "no rain expected" at a 5% chance and misreads the
   leave-by line; a minutes figure written by a model is not code-checked (times are).
 - Tests: 182 passed, 2 skipped. Code frozen for the walkthrough except for a wrong time or a safety risk.
+
+## 2 Nov: run results queryable through Brief 1
+
+- The brief asks for every run's scores, verdicts, response time and tokens in a table the Brief 1
+  insight tool can query. The data was in each run's `records.jsonl`, but not in one table and not
+  linked to Brief 1. Added `mb/evals/export_runs.py`: one row per brief per run (528 rows from 24
+  runs) with the model under test, its role, the day kind (arrival, sightseeing, departure,
+  free_day), first and final score, verdict, badge, failed, response time, tokens and cost.
+- Failed = safe version sent, an agent failed, or a rule check failed. Older records have no
+  `agent_failures` field, so it is read from the events, the same rule the runner uses.
+- The three Gemini runs are marked invalid (free-tier quota) and left out of the view Brief 1 reads.
+- In Brief 1: `analytics.brief_runs` (loaded by `scripts/load_morning_brief.py`, read-only user),
+  nine metrics and eight dimensions in the semantic layer, golden questions and tests.
+- "Which model failed most often on arrival days?" -> Claude Haiku 5.5 (as Composer): 3 of 9 arrival
+  briefs, 33.3%; GPT-4o 0 of 33, Sonnet 0 of 12, GPT-4.1 mini 0 of 9.
+- Tests: 186 passed, 2 skipped.

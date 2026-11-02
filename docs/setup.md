@@ -108,6 +108,23 @@ python -m mb.evals.review_export baseline                                   # th
 python -m mb.evals.agreement baseline reviewer.xlsx                         # our judges against a reviewer
 ```
 
+### Asking questions about the runs in plain English
+
+Every run's scores, verdicts, response time and tokens can be queried through the Brief 1 insight
+tool ([travezy-insight-query](https://github.com/jahnvitravezy/travezy-insight-query)). Write the
+table here, then load it there:
+
+```powershell
+python -m mb.evals.export_runs                       # data/runs/brief_runs.csv, one row per brief per run
+cd ..\travezy
+python scripts/load_morning_brief.py                 # into analytics.brief_runs
+python scripts/ask_cli.py "Which model failed most often on arrival days?"
+```
+
+A brief counts as failed if the traveller got the safe version, an agent failed, or a rule check
+failed. The Gemini runs are marked invalid (free-tier quota, so the model was never really tested)
+and left out of what the tool reads.
+
 ## 8. Where to change things
 
 | To change | Edit |
