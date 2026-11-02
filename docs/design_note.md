@@ -1,8 +1,7 @@
 # Morning Brief: design note
 
 This note explains how the Morning Brief works, why I made each decision, what it costs to run,
-and what still needs deciding before launch. It's written to be read before the walkthrough, but
-it should also make sense on its own.
+and what still needs deciding before launch. It's for anyone reviewing the service or taking it over.
 
 ## 1. What it does
 
