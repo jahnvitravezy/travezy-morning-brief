@@ -3,7 +3,7 @@ services:
     build: .
     env_file: .env                 # keys stay on the machine, never in the image
     environment:
-      DATABASE_URL: postgresql://mb:${POSTGRES_PASSWORD:-mb-local}@db:5432/mb   # the outbox lives in Postgres
+      DATABASE_URL: postgresql://mb:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/mb   # the outbox lives in Postgres
     ports:
       - "8000:8000"
     volumes:
@@ -18,7 +18,7 @@ services:
     environment:
       POSTGRES_USER: mb
       POSTGRES_DB: mb
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mb-local}   # local only; set POSTGRES_PASSWORD in .env to change
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}   # no default: production reads it from secrets
     volumes:
       - pgdata:/var/lib/postgresql/data                   # briefs survive restarts and rebuilds
     healthcheck:

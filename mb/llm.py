@@ -37,8 +37,15 @@ class LLMResult(Generic[T]):
     latency_ms: int
 
 
+def _llm_retries() -> int:
+    from mb.limits import limits
+    return int(limits()["llm"]["max_retries"])
+
+
 def load_prompt(version: str) -> str:
     path = PROMPTS / f"{version}.md"
+    if not path.exists():               # older versions live in prompts/archive
+        path = PROMPTS / "archive" / f"{version}.md"
     if not path.exists():
         raise FileNotFoundError(f"Prompt '{version}' not found at {path}")
     return path.read_text(encoding="utf-8")
@@ -60,7 +67,7 @@ class LLM:
         client = self.json_client if spec is not None and spec.structured == "json" else self.client
         out, raw = await client.chat.completions.create_with_completion(
             model=model, response_model=response_model, **extra,
-            timeout=timeout_s, max_retries=1,
+            timeout=timeout_s, max_retries=_llm_retries(),
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}])
         latency = int((time.perf_counter() - start) * 1000)
         try:

@@ -9,6 +9,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY mb mb
 COPY config config
 COPY prompts prompts
+COPY migrations migrations
 COPY data/itineraries data/itineraries
 COPY data/fixtures data/fixtures
 COPY data/preferences.yaml data/trips.yaml data/

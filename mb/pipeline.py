@@ -30,7 +30,9 @@ from mb.llm import LLM
 TRANSIENT = (asyncio.TimeoutError, litellm.exceptions.Timeout, litellm.exceptions.RateLimitError,
              litellm.exceptions.APIConnectionError, litellm.exceptions.ServiceUnavailableError,
              litellm.exceptions.InternalServerError)
-DEFAULT_BUDGET_S = 90.0
+from mb.limits import limits
+
+DEFAULT_BUDGET_S = float(limits()["brief_budget_s"])   # config/limits.yaml
 
 
 @dataclass
@@ -86,8 +88,8 @@ async def run_brief(ctx: Context, cfg: Config, llm: LLM, run_id: str,
     run = BriefRun(brief=safe_version(ctx, "not started"))
 
     r1, r2 = await asyncio.gather(
-        _step(a1.id, lambda: run_summariser(ctx, a1, llm, run_id), a1.timeout_s, clock, run),
-        _step(a2.id, lambda: run_surprise_finder(ctx, a2, llm, run_id), a2.timeout_s, clock, run),
+        _step(a1.id, lambda: run_summariser(ctx, a1, llm, run_id), a1.timeout_s, clock, run, a1.retries),
+        _step(a2.id, lambda: run_surprise_finder(ctx, a2, llm, run_id), a2.timeout_s, clock, run, a2.retries),
         return_exceptions=True)
 
     if isinstance(r1, BaseException):
@@ -106,7 +108,7 @@ async def run_brief(ctx: Context, cfg: Config, llm: LLM, run_id: str,
 
     try:
         brief, res = await _step(a3.id, lambda: run_composer(ctx, run.summary, run.surprises, a3, llm, run_id),
-                                 a3.timeout_s, clock, run)
+                                 a3.timeout_s, clock, run, a3.retries)
         models[a3.id] = res.model
     except Exception as e:  # any Composer failure falls back to the code-only merge
         run.events.append(f"{a3.id}: failed ({type(e).__name__}) -> code-only merge")
@@ -124,7 +126,7 @@ async def run_brief(ctx: Context, cfg: Config, llm: LLM, run_id: str,
         try:
             new, res = await _step(f"{a3.id}:fix", lambda: run_composer(ctx, run.summary, run.surprises, a3, llm,
                                                                         run_id, fix_reasons=verdict.reasons),
-                                   a3.timeout_s, clock, run)
+                                   a3.timeout_s, clock, run, a3.retries)
         except Exception as e:
             run.events.append(f"{a3.id}:fix: failed ({type(e).__name__}) -> keep the first draft")
             verdict = verdict.model_copy(update={"decision": _after_last_attempt(verdict, rubric)})
@@ -156,7 +158,7 @@ async def _judge(ctx, brief, rubric, spec, llm, run_id, attempts_left, clock, ru
     """The judge as a pipeline step. If it can't run (time, error), the rule checks decide alone."""
     try:
         verdict, res = await _step(spec.id, lambda: judge_brief(ctx, brief, rubric, spec, llm, run_id,
-                                                                attempts_left), spec.timeout_s, clock, run)
+                                                                attempts_left), spec.timeout_s, clock, run, spec.retries)
     except Exception as e:
         from mb.judge.rules import run_rule_checks
         from mb.judge.judge import decide

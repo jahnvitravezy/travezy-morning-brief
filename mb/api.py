@@ -13,10 +13,11 @@ from __future__ import annotations
 import datetime as dt
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
+from mb.auth import require_key
 from mb.budget import BudgetExceeded
 from mb.context import build_full_context
 from mb.contracts import MorningBrief, Verdict
@@ -50,10 +51,11 @@ app = FastAPI(title="Travezy Morning Brief", version="0.1", lifespan=lifespan,
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "budget": app.state.services.budget.status()}
+    s = app.state.services
+    return {"ok": True, "budget": s.budget.status(), "model_warnings": s.model_warnings}
 
 
-@app.get("/trips")
+@app.get("/trips", dependencies=[Depends(require_key)])
 async def trips():
     return app.state.services.loader.trip_ids()
 
@@ -76,7 +78,7 @@ async def _context(req: BriefRequest):
                                     providers=s.providers)
 
 
-@app.post("/brief", response_model=MorningBrief)
+@app.post("/brief", response_model=MorningBrief, dependencies=[Depends(require_key)])
 async def brief(req: BriefRequest):
     s: Services = app.state.services
     if not briefs_allowed(s.cfg):
@@ -89,7 +91,7 @@ async def brief(req: BriefRequest):
     return run.brief
 
 
-@app.post("/judge", response_model=Verdict)
+@app.post("/judge", response_model=Verdict, dependencies=[Depends(require_key)])
 async def judge(req: JudgeRequest):
     """The judge as its own service: score any brief for a trip day against the rubric."""
     s: Services = app.state.services
@@ -103,14 +105,14 @@ async def judge(req: JudgeRequest):
     return verdict
 
 
-@app.get("/outbox/{date}")
+@app.get("/outbox/{date}", dependencies=[Depends(require_key)])
 async def outbox(date: dt.date):
     """What the batch runner has prepared for a date, in send order."""
     return [{k: v for k, v in vars(i).items() if k != "brief"} | {"title": i.brief["notification"]["title"]}
             for i in app.state.store.for_date(date.isoformat())]
 
 
-@app.get("/preview/{date}/{trip_id}", response_class=HTMLResponse)
+@app.get("/preview/{date}/{trip_id}", response_class=HTMLResponse, dependencies=[Depends(require_key)])
 async def preview(date: dt.date, trip_id: str):
     """How a prepared brief looks to the traveller (for review and demos)."""
     from mb.preview import render

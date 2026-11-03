@@ -1,0 +1,20 @@
+# Every timeout and retry in one place. Change a number here and restart: no code change.
+# Retries are for errors that can pass (timeouts, rate limits, 5xx, dropped connections).
+
+brief_budget_s: 90            # the whole brief, all agents included; after this, the safe version goes out
+
+agents:                       # per agent: seconds per attempt, extra attempts after the first
+  mb.summariser.v1:      {timeout_s: 30, retries: 1}
+  mb.surprise_finder.v1: {timeout_s: 30, retries: 1}
+  mb.composer.v1:        {timeout_s: 30, retries: 1}
+  mb.judge.v1:           {timeout_s: 30, retries: 1}
+
+llm:                          # inside each attempt: the model client's own retries (rate limits, 5xx)
+  max_retries: 1
+
+apis:                         # external data; on failure the brief uses cached or estimated data instead
+  weather:   {timeout_s: 10, retries: 1}
+  places:    {timeout_s: 10, retries: 1}
+  routes:    {timeout_s: 10, retries: 1}
+  web_search: {timeout_s: 15, retries: 1}
+  fx:        {timeout_s: 4,  retries: 0}

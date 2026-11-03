@@ -1,8 +1,13 @@
 itinerary_loader: file          # file now; api later (one-line change)
 itinerary_dir: data/itineraries
-budget_inr: 5000                # agreed cap for model and API usage
+monthly_budget_inr: 5000        # model and API spend per calendar month (UTC)
+budget_alert_pct: [50, 80]      # alert once a month at each (log, plus MB_ALERT_WEBHOOK if set)
+budget_stop_pct: 100            # hard stop: no new paid calls past this
 inr_per_usd: 95.22             # for the cost report and budget; briefs use live rates (mb/sources/fx.py)
 inr_per_usd_checked: "2026-10-30"
 default_send_local: "07:30"
 send_lead_min: 60               # send at 07:30, or 60 min before the first activity if earlier
 briefs_enabled: true          # kill switch: false (or env MB_KILL_SWITCH=1) stops all new briefs
+places_hours_refresh_days: 3   # opening hours in the places table are re-checked after this many days
+places_search_refresh_days: 30  # an "ideas near here" search is repeated after this many days
+weather_provider: weatherapi      # weatherapi (WeatherAPI.com, key WEATHERAPI_KEY) or open_meteo

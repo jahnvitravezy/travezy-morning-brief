@@ -25,7 +25,7 @@ from mb.sources.cache import ROOT
 URL = "https://open.er-api.com/v6/latest/USD"
 CACHE = ROOT / "data" / "cache" / "fx"
 MAX_AGE_DAYS = 2
-TIMEOUT_S = 4
+TIMEOUT_S = 4   # default; config/limits.yaml apis.fx wins
 
 
 class Rates(dict):
@@ -45,7 +45,8 @@ def fixed() -> Rates:
 
 def _fetch() -> dict:
     import httpx
-    r = httpx.get(URL, timeout=TIMEOUT_S)
+    from mb.limits import api
+    r = httpx.get(URL, timeout=api("fx")["timeout_s"])
     r.raise_for_status()
     body = r.json()
     if body.get("result") != "success" or "INR" not in body.get("rates", {}):

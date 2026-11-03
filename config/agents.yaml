@@ -5,7 +5,6 @@
   output: out.summary
   model: openai/gpt-4o
   prompt_version: summariser-v7
-  timeout_s: 30
 
 - id: mb.surprise_finder.v1
   use_case: morning_brief
@@ -14,7 +13,6 @@
   output: out.surprises
   model: openai/gpt-4o
   prompt_version: surprise-finder-v1
-  timeout_s: 30
 
 - id: mb.composer.v1
   use_case: morning_brief
@@ -23,7 +21,6 @@
   output: out.draft
   model: openai/gpt-4o
   prompt_version: composer-v4
-  timeout_s: 30
 
 - id: mb.judge.v1
   use_case: morning_brief
@@ -33,4 +30,3 @@
   model: openai/gpt-4o-mini
   prompt_version: judge-v3
   rubric: rubric.morning_brief.v1
-  timeout_s: 30

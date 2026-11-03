@@ -62,3 +62,13 @@ def test_litellm_uses_its_local_price_list():
     for name in load_config().models:
         key = name.split("/", 1)[1] if name.startswith(("openai/", "anthropic/")) else name
         assert key in backup, f"{name} has no price in LiteLLM's local list"
+
+
+def test_models_nearing_end_of_life_are_flagged():
+    import datetime as dt
+    from mb.config import eol_warnings, load_config
+    cfg = load_config()
+    assert cfg.models["openai/gpt-4o"].end_of_life == dt.date(2027, 1, 1)
+    soon = eol_warnings(cfg, today=dt.date(2026, 11, 3))
+    assert any(w.startswith("openai/gpt-4o ") for w in soon)
+    assert eol_warnings(cfg, today=dt.date(2026, 6, 1)) == []            # more than 90 days away

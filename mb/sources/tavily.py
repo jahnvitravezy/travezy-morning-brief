@@ -6,11 +6,13 @@ place ID is rejected by the judge's rule checks.
 from __future__ import annotations
 
 import httpx
+
+from mb.limits import api_client
 from decouple import config
 
 from mb.budget import Budget
 from mb.contracts import WebResult
-from mb.sources.cache import JsonCache
+from mb.sources.cache import JsonCache, get_cache
 
 SEARCH_URL = "https://api.tavily.com/search"
 SKU = "tavily_search"
@@ -20,8 +22,8 @@ class Tavily:
     def __init__(self, budget: Budget, api_key: str | None = None,
                  client: httpx.AsyncClient | None = None, cache: JsonCache | None = None):
         self.key = api_key or config("TAVILY_API_KEY")
-        self.client = client or httpx.AsyncClient(timeout=15)
-        self.cache = cache or JsonCache("tavily")
+        self.client = client or api_client("web_search")
+        self.cache = cache or get_cache("tavily")
         self.budget = budget
 
     async def search(self, query: str, run_id: str, max_results: int = 5) -> tuple[list[WebResult], str]:

@@ -22,7 +22,7 @@ def client(monkeypatch):
 
     monkeypatch.setattr(api, "build_full_context", fake_context)
     monkeypatch.setattr(api, "run_brief", fake_run)
-    with TestClient(api.app) as c:
+    with TestClient(api.app, headers={"X-API-Key": "test-key"}) as c:
         yield c
 
 
@@ -83,3 +83,13 @@ def test_preview_renders_a_prepared_brief(client, tmp_path):
     r = client.get("/preview/2026-11-21/dubai_up01")
     assert r.status_code == 200 and "Day 2 in Dubai" in r.text and "Al Fahidi" in r.text
     assert client.get("/preview/2026-11-21/nobody").status_code == 404
+
+
+def test_calls_without_the_right_key_are_refused(client, monkeypatch):
+    assert client.get("/trips", headers={"X-API-Key": "wrong"}).status_code == 401
+    with TestClient(api.app) as bare:
+        assert bare.get("/trips").status_code == 401
+        assert bare.get("/health").status_code == 200          # health stays open
+        assert bare.get("/trips", params={"key": "test-key"}).status_code == 200
+    monkeypatch.delenv("MB_API_KEY")
+    assert client.get("/trips").status_code == 503              # no key configured: fail closed

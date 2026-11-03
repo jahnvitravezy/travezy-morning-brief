@@ -9,11 +9,13 @@ import datetime as dt
 from pathlib import Path
 
 import httpx
+
+from mb.limits import api_client
 import yaml
 from pydantic import BaseModel
 
 from mb.contracts import HourWeather, WeatherDay
-from mb.sources.cache import ROOT, JsonCache
+from mb.sources.cache import ROOT, JsonCache, get_cache
 
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -31,8 +33,8 @@ class Geo(BaseModel):
 class OpenMeteo:
     def __init__(self, client: httpx.AsyncClient | None = None, cache: JsonCache | None = None,
                  fixtures: Path = FIXTURES):
-        self.client = client or httpx.AsyncClient(timeout=10)
-        self.cache = cache or JsonCache("open_meteo")
+        self.client = client or api_client("weather")
+        self.cache = cache or get_cache("open_meteo")
         self.fixtures = yaml.safe_load(fixtures.read_text(encoding="utf-8")) if fixtures.exists() else {}
 
     async def geocode(self, name: str) -> Geo:

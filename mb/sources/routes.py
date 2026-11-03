@@ -8,10 +8,12 @@ from __future__ import annotations
 import math
 
 import httpx
+
+from mb.limits import api_client
 from decouple import config
 
 from mb.budget import Budget
-from mb.sources.cache import JsonCache
+from mb.sources.cache import JsonCache, get_cache
 
 ROUTE_MATRIX_URL = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
 SKU = "google_routes_matrix_element"
@@ -36,8 +38,8 @@ class GoogleRoutes:
     def __init__(self, budget: Budget, api_key: str | None = None,
                  client: httpx.AsyncClient | None = None, cache: JsonCache | None = None):
         self.key = api_key or config("GOOGLE_MAPS_API_KEY")
-        self.client = client or httpx.AsyncClient(timeout=10)
-        self.cache = cache or JsonCache("google_routes")
+        self.client = client or api_client("routes")
+        self.cache = cache or get_cache("google_routes")
         self.budget = budget
 
     async def leg(self, a: tuple[float, float], b: tuple[float, float], run_id: str,
