@@ -41,6 +41,7 @@ class ModelSpec(Strict):
     temperature: bool = True     # False: the model only runs at its own default (Claude 5.5 models)
     structured: Literal["tools", "json"] = "tools"   # json: no forced tool call (Claude Sonnet 5.5)
     end_of_life: dt.date | None = None    # the provider's retirement date; warned about ahead of time
+    params: dict[str, str | int | float] = {}   # extra model settings, e.g. reasoning_effort, set in config only
 
 
 class SourceSpec(Strict):

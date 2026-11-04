@@ -11,6 +11,8 @@
 |---|---|---|
 | Models (GPT-4o writing, gpt-4o-mini judging) | ₹1.22 | ₹1.22 |
 | Models with GPT-4.1 mini as Surprise finder (3.4) | | **₹0.82** ($0.0086, score 87.7 vs 88.3, a tie) |
+| Models with its replacement, gpt-5-mini, as Surprise finder | | **₹1.20** ($0.0126, first score 84.5 vs 82.4) |
+| Models with gpt-5-mini as Summariser or Composer (minimal reasoning) | | **₹0.88–0.90** ($0.0092–0.0095) |
 | Data, nothing stored yet (first traveller to a place) | ₹16.85 | **₹4.0** |
 | Data, places table and cache warm (80% of lookups stored) | ₹12 | **₹0.80** before the free allowance |
 

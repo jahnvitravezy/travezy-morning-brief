@@ -64,6 +64,7 @@ class LLM:
         start = time.perf_counter()
         spec = self.models.get(model)
         extra = {"temperature": temperature} if spec is None or spec.temperature else {}
+        extra |= dict(spec.params) if spec is not None else {}
         client = self.json_client if spec is not None and spec.structured == "json" else self.client
         out, raw = await client.chat.completions.create_with_completion(
             model=model, response_model=response_model, **extra,

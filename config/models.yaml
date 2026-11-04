@@ -5,7 +5,7 @@ openai/gpt-4o:                  { family: openai, end_of_life: 2027-01-01 }     
 openai/gpt-4o-mini:             { family: openai }      # judge starting point (the brief's)
 openai/gpt-4.1-mini:            { family: openai, end_of_life: 2027-01-01 }      # retires Jan 2027
 openai/gpt-4.1:                 { family: openai, end_of_life: 2027-01-01 }      # retires Jan 2027
-openai/gpt-5-mini:              { family: openai, temperature: false }           # replacement candidate
+openai/gpt-5-mini:              { family: openai, temperature: false, params: { reasoning_effort: minimal } }   # replacement candidate; minimal reasoning keeps it inside the 30 s limit
 anthropic/claude-sonnet-5-5:    { family: anthropic, temperature: false, structured: json }   # rejects temperature=0 and forced tool use
 anthropic/claude-haiku-5-5:     { family: anthropic, temperature: false }
 gemini/gemini-3.8-flash:        { family: google }

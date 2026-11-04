@@ -280,3 +280,40 @@ Gemini flash-lite (15 of 66 judged, free-tier quota) is left out of the export: 
 - "Which model failed most often on arrival days?" -> Claude Haiku 5.5 (as Composer): 3 of 9 arrival
   briefs, 33.3%; GPT-4o 0 of 33, Sonnet 0 of 12, GPT-4.1 mini 0 of 9.
 - Tests: 186 passed, 2 skipped.
+
+## 3–4 Nov: actions from the walkthrough
+
+All the points from Sourabh's 3 Nov email. The reply goes through them one by one.
+
+**Built:**
+- **Login:** an API key on every endpoint except `/health`. With no key set, the service refuses every request (it fails closed).
+- **Postgres:** the service's own schema with a migration script (`python -m mb.db`). It holds the outbox, the paid-call ledger, budget alerts, a shared cache and the places table.
+- **Budget:** a monthly budget with alerts at 50% and 80% (each fires once a month, even with several copies running) and a hard stop at 100%.
+- **Places table:** a stop is found once with the free IDs-only search, then read from Place Details. Hours are refreshed every 3 days, and searches for ideas every 30 days.
+- **Prices:** Google's India pricing.
+- **Limits:** every timeout and retry in `config/limits.yaml`. Weather comes from WeatherAPI.com, switched in config.
+- **Models:** end-of-life dates with a warning 90 days ahead. Model settings such as `reasoning_effort` are set in config only.
+- **Badge:** covers only the AI-written parts (`Confidence.applies_to`).
+- **Quality (blind review):**
+  - Titles name the day's key moments.
+  - No ideas in a family's rest break, and no food idea straight after a meal.
+  - A diet clash offers a checked alternative.
+  - The judge can't call a verified place invented.
+- **Ops:** old prompts archived, no default database password, retention clean-up (`python -m mb.db cleanup`), and `--concurrency` for the batch.
+- **Docs:** `production_notes.md`, `loader_spec.md`, `cost_sheet.md`, and Mac and Linux setup.
+
+**Replacement models for the January 2027 retirements** (one role swapped at a time, judge gpt-4o-mini, same 22 days):
+
+| Role tested | Model | First score | Agent failures | Fallbacks | Time per brief | Cost per brief |
+|---|---|---|---|---|---|---|
+| All (baseline-v9) | GPT-4o | 82.4 | 0 | 0 | 9.4 s | $0.0139 |
+| Summariser | gpt-5-mini, minimal reasoning | 83.5 | 0 | 3 | 13.2 s | $0.0095 |
+| Surprise finder | gpt-5-mini | 84.5 | 0 | 2 | 16.3 s | $0.0126 |
+| Composer | gpt-5-mini, minimal reasoning | 81.8 | 0 | 3 | 14.4 s | $0.0092 |
+| Judge (re-judging v9) | gpt-5-mini | avg 88.8 | 0 | n/a | n/a | $0.0015 a judgement |
+
+- **At its default reasoning, gpt-5-mini timed out:** 10 of 22 briefs as Summariser, and 14 agent failures as Composer, because it kept thinking past the 30 s limit. Setting `reasoning_effort: minimal` in `config/models.yaml` fixed it with no code change.
+- **Scores are within the judge's noise (about 2 points) in every role.** gpt-5-mini cuts model cost by about 30% as Summariser or Composer. It's 4 to 7 s slower, which doesn't matter for briefs prepared ahead.
+- **Watch point:** 2 to 3 fallbacks in each gpt-5-mini run, against 0 for GPT-4o on the same days. Read those briefs before switching.
+- baseline-v9 (all the fixes, GPT-4o): 22/22, 0 fallbacks, every rule passed, first score 82.4 (v8: 84.5, within noise), 11 green and 11 amber. Review pack in `data/runs/baseline-v9/review`.
+- Tests: 201 passed (plus the Postgres tests, run against a test database).
