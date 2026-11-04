@@ -31,6 +31,7 @@ class AppSettings(Strict):
     send_lead_min: int = Field(ge=0)
     briefs_enabled: bool = True
     weather_provider: Literal["weatherapi", "open_meteo"] = "weatherapi"
+    retention_days: dict[str, int] = {"outbox": 30, "cache": 30, "place_searches": 30, "usage_ledger": 400}
     places_hours_refresh_days: int = Field(default=3, gt=0)
     places_search_refresh_days: int = Field(default=30, gt=0)
 

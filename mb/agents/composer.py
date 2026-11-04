@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 
-from mb.agents.facts import (_covers, ensure_covered, fix_idea_count, safe_tip, spend, suggested_swap, timeline,
+from mb.agents.facts import (_covers, key_title, ensure_covered, fix_idea_count, safe_tip, spend, suggested_swap, timeline,
                              tip_problems, unknown_times,
                              weather_clashes, weather_summary)
 from mb.config import AgentSpec
@@ -68,7 +68,7 @@ def merge(ctx: Context, summary: Summary, surprises: Surprises | None,
         brief_id=brief_id(ctx), trip_id=ctx.trip_id, date=ctx.date,
         send_at_local=f"{ctx.send_at_local:%H:%M}" if ctx.send_at_local else "", send_at_utc=send_at_utc(ctx),
         timezone=ctx.timezone or "",
-        notification=Notification(title=(text or s).notification_title,
+        notification=Notification(title=key_title(ctx),   # code names the key moments; the model writes the body
                                   body=fix_idea_count((text or s).notification_body, len(items))),
         timeline=summary.timeline,
         weather=Weather(summary=weather_summary(ctx), clash=clashes[0] if clashes else None, suggested_swap=swap),
@@ -116,11 +116,10 @@ async def run_composer(ctx: Context, summary: Summary, surprises: Surprises | No
 
 def safe_version(ctx: Context, reason: str) -> MorningBrief:
     """Fallback: the day's plan only, no surprises, no badge. Code only, so it cannot fail."""
-    title = f"Day {ctx.day.index + 1} in {ctx.region}" if ctx.region else f"Day {ctx.day.index + 1}"
     brief = MorningBrief(
         brief_id=brief_id(ctx), trip_id=ctx.trip_id, date=ctx.date,
         send_at_local=f"{ctx.send_at_local:%H:%M}" if ctx.send_at_local else "", send_at_utc=send_at_utc(ctx), timezone=ctx.timezone or "",
-        notification=Notification(title=title[:40], body="Your plan for today"),
+        notification=Notification(title=key_title(ctx), body="Your plan for today"),
         timeline=timeline(ctx), heads_ups=ensure_covered([], ctx), weather=Weather(summary=weather_summary(ctx)),
         spend_estimate=_spend_text(spend(ctx, _fx())), actions=["ask"])
     brief.confidence.flags.append(f"safe_version: {reason}")

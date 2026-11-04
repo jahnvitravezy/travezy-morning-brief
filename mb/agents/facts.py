@@ -1,6 +1,8 @@
 """Facts for the brief, computed in code rather than by a model: timeline, travel, spend."""
 from __future__ import annotations
 
+import re
+
 import datetime as dt
 
 import yaml
@@ -192,6 +194,17 @@ def suggested_swap(ctx: Context) -> str | None:
 
 
 # ---------- Checks that must reach the traveller ----------
+def _diet_alternative(ctx: Context, words: tuple[str, ...]) -> str:
+    """A checked place that suits the diet, from today's candidates (blind review, 3 Nov:
+    "ask the restaurant" alone isn't enough). Empty when no candidate fits."""
+    for c in ctx.candidates:
+        text = f" {c.name} {' '.join(c.types)} {c.snippet} ".lower().replace("_", " ")
+        if any(w in text for w in words):
+            near = f", {c.travel_min} min away" if c.travel_min else ""
+            return f", or try {c.name} ({c.window.start:%H:%M}-{c.window.end:%H:%M}{near})"
+    return ""
+
+
 def diet_checks(ctx: Context) -> list[str]:
     """Jain food rules are stricter than "vegetarian" or "plant-based": every meal needs asking."""
     r = set(ctx.preferences.diet.restrictions)
@@ -199,7 +212,8 @@ def diet_checks(ctx: Context) -> list[str]:
         meals = [a.name for a in ctx.day.activities if a.kind == "eat" and "jain" not in a.note.lower()]
         if not meals:
             return []
-        return [f"Jain food: ask {' and '.join(meals)} for dishes without onion, garlic or root vegetables"]
+        return [f"Jain food: ask {' and '.join(meals)} for dishes without onion, garlic or root vegetables"
+                + _diet_alternative(ctx, ("jain",))]
     if r & {"vegetarian", "vegan"}:
         # Every planned meal not already marked vegetarian gets a check (stand-in review: B04, B06, B11)
         word = "vegan" if "vegan" in r else "vegetarian"
@@ -208,7 +222,8 @@ def diet_checks(ctx: Context) -> list[str]:
         if not meals:
             return []
         who = "for the vegetarians in your group" if ctx.preferences.diet.applies_to == "some" else "for you"
-        return [f"{word.capitalize()} food: check {' and '.join(meals)} has {word} dishes {who}"]
+        return [f"{word.capitalize()} food: check {' and '.join(meals)} has {word} dishes {who}"
+                + _diet_alternative(ctx, ("vegan",) if word == "vegan" else ("vegetarian", "vegan", "veg ", "jain"))]
     return []
 
 
@@ -445,3 +460,26 @@ def fix_idea_count(body: str, n: int) -> str:
     repl = "" if n == 0 else f", plus {n} idea{'s' if n > 1 else ''} for you"
     out = pat.sub(repl, body, count=1)
     return re.sub(r"\s+([.,!])", r"\1", out).strip()
+
+
+def _short(name: str) -> str:
+    return re.split(r"\s[-–:(]\s?|,", name)[0].strip()
+
+
+def key_title(ctx: Context, limit: int = 40) -> str:
+    """The notification title names the day's key moments, worked out in code.
+
+    Blind review (3 Nov): "Day 2 in Dubai" said nothing. Now: "Burj Khalifa 16:30, then Dhow cruise",
+    the booked or timed stops first, then the first planned visit. A free day says so."""
+    acts = [a for a in ctx.day.activities if a.kind in ("do", "eat")]
+    key = sorted([a for a in acts if a.booked or a.timed_at], key=lambda a: a.timed_at or a.start) \
+        or [a for a in acts if a.kind == "do"][:1]
+    if not key:
+        return (f"Free day in {ctx.region}" if ctx.region else "Free day")[:limit]
+    first = f"{_short(key[0].name)} {(key[0].timed_at or key[0].start):%H:%M}"
+    flight = next((a for a in ctx.day.activities if a.kind == "move" and "flight" in f"{a.name} {a.note}".lower()), None)
+    if flight and len(both := f"{first}, flight {(flight.timed_at or flight.start):%H:%M}") <= limit:
+        return both                             # a departure day leads with what must not be missed
+    if len(key) > 1 and len(both := f"{first}, then {_short(key[1].name)}") <= limit:
+        return both
+    return first if len(first) <= limit else first[:limit - 1].rstrip() + "…"

@@ -1,8 +1,7 @@
 # Morning Brief: setup guide
 
 This is everything you need to run the service, the tests and the evaluation on a fresh machine.
-The commands are for Windows PowerShell. On macOS or Linux they're the same, except you activate
-the virtual environment with `source .venv/bin/activate`.
+Commands are shown for Windows PowerShell and for macOS or Linux (bash or zsh).
 
 ## 1. What you'll need
 
@@ -14,11 +13,20 @@ the virtual environment with `source .venv/bin/activate`.
 ## 2. Add your keys
 
 ```powershell
-Copy-Item .env.example .env
+Copy-Item .env.example .env      # Windows
 notepad .env
 ```
 
-Fill in the keys and save. Git ignores `.env`, and it's never copied into the Docker image, so
+```bash
+cp .env.example .env             # macOS / Linux
+nano .env
+```
+
+Fill in the keys and save. Also set:
+- `MB_API_KEY`: any long random string. Every call must send it as the `X-API-Key` header.
+- `POSTGRES_PASSWORD`: required, with no default. Production reads it from secrets.
+
+To make a random string: PowerShell `-join ((48..57)+(97..122) | Get-Random -Count 32 | % {[char]$_})`, or on macOS and Linux `openssl rand -hex 16`. Git ignores `.env`, and it's never copied into the Docker image, so
 your keys stay on your machine.
 
 ## 3. Start the service
@@ -33,6 +41,19 @@ seconds to start up, then check it's alive:
 ```powershell
 Invoke-RestMethod http://localhost:8000/health
 ```
+
+```bash
+curl -s http://localhost:8000/health
+```
+
+`/health` needs no key. Every other endpoint needs the `X-API-Key` header:
+
+```bash
+curl -s -H "X-API-Key: $MB_API_KEY" http://localhost:8000/trips
+```
+
+On start-up the service creates its tables in their own schema (`MB_DB_SCHEMA`, default
+`morning_brief`). To run the migrations yourself, use `python -m mb.db`.
 
 | Endpoint | What it does |
 |---|---|
@@ -84,16 +105,27 @@ To stop all new briefs at once, set `briefs_enabled: false` in `config/app.yaml`
 The tests need no network and cost nothing.
 
 ```powershell
-python -m venv .venv
+python -m venv .venv                 # Windows
 & .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python -m pytest -q
 ```
 
+```bash
+python3 -m venv .venv                # macOS / Linux
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m pytest -q
+```
+
+The Postgres tests run only when `TEST_DATABASE_URL` points at a throwaway database.
+
 ## 7. Running the evaluation
 
 Every paid call goes through the budget guard (the cap is in `config/app.yaml`) and is logged in
 `data/usage/`. Set `MB_FX=fixed` first so the results can be repeated.
+
+On macOS and Linux, use `export MB_FX=fixed` instead of the first line.
 
 ```powershell
 $env:MB_FX = "fixed"
@@ -132,7 +164,9 @@ and left out of what the tool reads.
 | Which model does a job | `config/agents.yaml` (the models are listed in `config/models.yaml`) |
 | A prompt | Add a new file in `prompts/` and point the agent at it |
 | The rubric, pass marks or weights | `config/rubrics/` |
-| The send time, budget or kill switch | `config/app.yaml` |
+| The send time, monthly budget and alerts, kill switch, retention, weather provider | `config/app.yaml` |
+| Timeouts and retries for every agent and API | `config/limits.yaml` |
+| A model's end-of-life date | `config/models.yaml` (warned 90 days ahead in the log and on `/health`) |
 | Prices | `config/prices.yaml` |
 | Where itineraries come from | `mb/sources/itinerary.py` (`get_loader`) and `itinerary_loader` in `config/app.yaml` |
 

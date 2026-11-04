@@ -16,16 +16,22 @@ calculated in code, so a brief can't make them up.
 
 - **Run it:** [`docs/setup.md`](docs/setup.md), one command with Docker
 - **Understand it:** [`docs/design_note.md`](docs/design_note.md), the decisions, the checks, cost and what's still open
+- **Run it in production:** [`docs/production_notes.md`](docs/production_notes.md) (schedule, scaling, keys, retention), [`docs/loader_spec.md`](docs/loader_spec.md) (the fields the loader needs) and [`docs/cost_sheet.md`](docs/cost_sheet.md)
 - **See it:** [`docs/architecture.html`](docs/architecture.html), how the parts fit together
 - **Follow how it was built:** [`docs/build_log.md`](docs/build_log.md), every run, result, bug and fix, by date
 
 ## Quick start
 
 ```powershell
-Copy-Item .env.example .env      # then add your keys
+Copy-Item .env.example .env      # Windows: then add your keys, MB_API_KEY and POSTGRES_PASSWORD
 docker compose up -d --build
 Invoke-RestMethod http://localhost:8000/health
-Start-Process http://localhost:8000/docs
+```
+
+```bash
+cp .env.example .env             # macOS / Linux: the same, then
+docker compose up -d --build
+curl -s http://localhost:8000/health
 ```
 
 ## What's inside

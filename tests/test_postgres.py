@@ -45,3 +45,11 @@ def test_cache_is_shared(pg):
     from mb.sources.cache import get_cache
     get_cache("w").set({"k": 1}, {"v": 2})
     assert get_cache("w").get({"k": 1}) == {"v": 2}
+
+
+def test_cleanup_deletes_only_what_is_past_retention(pg):
+    from mb import db
+    pg.execute("INSERT INTO cache (name, key, value, updated_at) VALUES ('w','old','{}', now() - interval '40 days'),"
+               " ('w','new','{}', now())")
+    out = db.cleanup(pg, {"outbox": 30, "cache": 30, "place_searches": 30, "usage_ledger": 400})
+    assert out["cache"] == 1 and pg.execute("SELECT count(*) FROM cache").fetchone()[0] == 1

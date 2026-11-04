@@ -81,7 +81,7 @@ def test_preview_renders_a_prepared_brief(client, tmp_path):
     api.app.state.store.save(OutboxItem("dubai_up01", "2026-11-21", "Asia/Dubai", "07:30", "2026-11-21T03:30:00Z",
                                         "pass", 90, "green", b.model_dump(mode="json")))
     r = client.get("/preview/2026-11-21/dubai_up01")
-    assert r.status_code == 200 and "Day 2 in Dubai" in r.text and "Al Fahidi" in r.text
+    assert r.status_code == 200 and b.notification.title in r.text and not b.notification.title.startswith("Day ") and "Al Fahidi" in r.text
     assert client.get("/preview/2026-11-21/nobody").status_code == 404
 
 
@@ -93,3 +93,12 @@ def test_calls_without_the_right_key_are_refused(client, monkeypatch):
         assert bare.get("/trips", params={"key": "test-key"}).status_code == 200
     monkeypatch.delenv("MB_API_KEY")
     assert client.get("/trips").status_code == 503              # no key configured: fail closed
+
+
+def test_badge_covers_only_the_ai_written_parts():
+    from mb.contracts import AI_PARTS, Confidence
+    from mb.preview import render
+    assert Confidence().applies_to == AI_PARTS == ["heads_ups", "surprises", "local_tip"]
+    from mb.sources.itinerary import FileLoader
+    html = render(safe_version(build_context(FileLoader().load("dubai_up01"), 1), "test"))
+    assert html.index("From your itinerary") < html.index("Suggestions for today") < html.index("badge style")

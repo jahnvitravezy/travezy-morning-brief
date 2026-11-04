@@ -228,7 +228,13 @@ class SurpriseItem(Contract):
     place_id: str | None = None
 
 
+AI_PARTS = ["heads_ups", "surprises", "local_tip"]
+
+
 class Confidence(Contract):
+    """The judge's badge. It covers only the AI-written parts (applies_to): the timeline, weather
+    and spend come straight from the itinerary and code, so they carry no accuracy score."""
+    applies_to: list[str] = AI_PARTS
     score: int | None = Field(default=None, ge=0, le=100)
     badge: Literal["green", "amber", "red"] | None = None
     flags: list[str] = []

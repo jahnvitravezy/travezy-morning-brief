@@ -6,7 +6,8 @@ The schema is MB_DB_SCHEMA (default morning_brief), so it can sit in Travezy's p
 database next to other tables. Migrations are migrations/*.sql, applied once each, in order,
 under an advisory lock:
 
-    python -m mb.db          # apply migrations (the service also does this on start-up)
+    python -m mb.db             # apply migrations (the service also does this on start-up)
+    python -m mb.db cleanup     # delete rows past their retention (config/app.yaml), e.g. daily
 """
 from __future__ import annotations
 
@@ -58,7 +59,28 @@ def conn():
     return _conn
 
 
+RETENTION_SQL = {   # table: (time column, setting in config/app.yaml retention_days)
+    "outbox": ("created_at", "outbox"),
+    "cache": ("updated_at", "cache"),
+    "usage_ledger": ("ts", "usage_ledger"),
+    "place_searches": ("searched_at", "place_searches"),
+}
+
+
+def cleanup(c, days: dict[str, int]) -> dict[str, int]:
+    """Delete what is past its retention. The places table is kept and refreshed, never expired."""
+    out = {}
+    for table, (col, key) in RETENTION_SQL.items():
+        cur = c.execute(f"DELETE FROM {table} WHERE {col} < now() - make_interval(days => %s)", (int(days[key]),))
+        out[table] = cur.rowcount
+    return out
+
+
 if __name__ == "__main__":
+    import sys
     import psycopg
     with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as c:
         print("applied:", migrate(c) or "nothing new")
+        if sys.argv[1:] == ["cleanup"]:
+            from mb.config import load_config
+            print("deleted:", cleanup(c, load_config().app.retention_days))

@@ -201,3 +201,41 @@ def test_uneven_paths_are_a_heads_up_for_children_and_stair_avoiders():
     assert any(l.startswith("Tegallalang Rice Terrace: uneven paths, keep the children") for l in kids)
     couple = access_checks(build_context(L.load("bali_up04"), 1))
     assert any(l.startswith("Tegallalang Rice Terrace: uneven paths, take it slowly") for l in couple)
+
+
+# --- blind review, 3 Nov ------------------------------------------------------
+
+def test_title_names_the_days_key_moments_not_day_n():
+    from mb.agents.facts import key_title
+    c = ctx_for("dubai_up01", 1)
+    t = key_title(c)
+    assert not t.startswith("Day ") and len(t) <= 40 and any(ch.isdigit() for ch in t)
+    names = [a.name.split(" ")[0] for a in c.day.activities if a.kind in ("do", "eat")]
+    assert any(n in t for n in names)
+
+
+def test_free_day_title_says_free_day():
+    from mb.agents.facts import key_title
+    c = ctx_for("bali_up05", 2)          # 12 Dec: free day
+    assert key_title(c).startswith("Free day")
+
+
+def test_diet_clash_offers_a_checked_alternative():
+    from mb.contracts import Candidate, Window
+    c = ctx_for("dubai_up01", 1)
+    alt = Candidate(id="places:v", provider="google_places", name="Rangoli Veg Kitchen",
+                    window=Window(start=dt.time(14), end=dt.time(16)), types=["vegetarian_restaurant"], travel_min=8)
+    lines = diet_checks(c.model_copy(update={"candidates": [alt]}))
+    if lines:                                   # only when a planned meal isn't marked vegetarian
+        assert "or try Rangoli Veg Kitchen (14:00-16:00, 8 min away)" in lines[0]
+
+
+def test_judge_cannot_call_a_verified_place_invented():
+    from mb.judge.judge import confirm_serious
+    c = ctx_for("dubai_up01", 1)
+    place = next(a.name for a in c.day.activities if a.kind == "do")
+    from mb.agents.composer import safe_version
+    brief = safe_version(c, "t")
+    brief.heads_ups.append(f"Visit {place} early")
+    ok, dropped = confirm_serious([f'"Visit {place} early" names a place not in the inputs: invented'], brief, c)
+    assert ok == [] and "verified" in dropped[0]

@@ -112,9 +112,11 @@ def main():
     p.add_argument("--window", type=int, default=60, help="minutes ahead to prepare (default 60)")
     p.add_argument("--plan", action="store_true", help="only list who is due; no cost")
     p.add_argument("--force", action="store_true", help="regenerate briefs already in the outbox")
+    p.add_argument("--concurrency", type=int, default=3, help="briefs written at the same time (default 3)")
     a = p.parse_args()
     s = Services()
-    asyncio.run(run_batch(s, _parse_at(a.at), a.window, get_store(), plan_only=a.plan, force=a.force))
+    asyncio.run(run_batch(s, _parse_at(a.at), a.window, get_store(), plan_only=a.plan, force=a.force,
+                          concurrency=a.concurrency))
 
 
 if __name__ == "__main__":

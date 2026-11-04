@@ -178,14 +178,12 @@ stand-ins and don't replace the real review.
 
 | Per brief | Cost |
 |---|---|
-| Models (four agents, GPT-4o writing, gpt-4o-mini judging, fixes included) | about ₹1.22 |
-| Data (Places, Routes, Tavily), measured in the batch run with some caching | about ₹12 (about ₹17 with nothing cached) |
+| Models (four agents, GPT-4o writing, gpt-4o-mini judging, fixes included) | about ₹1.22 (₹0.82 with GPT-4.1 mini as Surprise finder) |
+| Data (Places, Routes, Tavily) at Google's India pricing, with the places table | about ₹4 for the first traveller to a place, about ₹0.80 after, and ₹0 a month within Google's free allowance at 100 travellers a day |
 
 A brief takes about 9 seconds to write (16 seconds at the slow end), and the batch prepares them
-well before the send time. At 1 USD = ₹95.22 (checked 30 Oct). Google's free monthly allowances
-(1,000 Text Search calls, about ₹3,333, and 10,000 Route Matrix elements, about ₹4,761) aren't
-deducted. Prices were checked against Google's pricing page on 29 Oct 2026 (`config/prices.yaml`).
-The monthly cost at 50 and 100 travellers a day is in `cost_and_time.md` in the review pack.
+well before the send time. At 1 USD = ₹95.22 (checked 30 Oct). Prices are Google's India pricing, checked on 3 Nov 2026 (`config/prices.yaml`). The monthly
+cost at 50 and 100 travellers a day, with the free allowance deducted, is in `docs/cost_sheet.md`.
 
 Data is most of the cost, so that's where the saving is: travellers on the same itinerary share
 hotels and sights, and a cache shared between them removes most repeat lookups.

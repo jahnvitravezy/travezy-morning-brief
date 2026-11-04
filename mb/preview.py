@@ -46,18 +46,19 @@ text-transform:uppercase;letter-spacing:.04em;color:#5b6475}} ul{{margin:0;paddi
 .t{{font-weight:700;display:inline-block;min-width:44px}} .bk{{font-size:11px;background:#e8f0ff;color:#1F3864;border-radius:6px;padding:1px 5px}}
 .tr{{font-size:12px;color:#5b6475;margin-left:44px}} .badge{{display:inline-block;color:#fff;border-radius:10px;padding:2px 8px;font-size:12px}}
 .idea{{border:1px solid #e3e7ef;border-radius:12px;padding:8px 10px;margin:6px 0}} .in{{font-weight:700}} .im{{font-size:12px;color:#5b6475}}
-.mut{{color:#5b6475;margin:0}} .clash{{color:#a15c00}} button{{border:1px solid #1F3864;background:#fff;color:#1F3864;border-radius:18px;
+.grp{{padding:10px 16px 0;font-size:12px;font-weight:700;color:#1F3864;border-top:6px solid #f3f5f9}} .mut{{color:#5b6475;margin:0}} .clash{{color:#a15c00}} button{{border:1px solid #1F3864;background:#fff;color:#1F3864;border-radius:18px;
 padding:6px 12px;margin:4px 4px 0 0;font:inherit;font-size:13px}} a{{color:#1F3864;font-size:13px}}
 </style></head><body><div class=phone>
 <div class=lock><div class=time>Sent {_e(b.send_at_local)} {_e(b.timezone)}{f' · {_e(b.send_at_utc)}' if b.send_at_utc else ''}</div>
 <div class=notif><div class=nt>{_e(b.notification.title)}</div><div>{_e(b.notification.body)}</div></div></div>
-<div class=sec><span class=badge style="background:{badge[0]}">{badge[1]}{f' · {b.confidence.score}' if b.confidence.score is not None else ''}</span></div>
+<div class=grp>From your itinerary</div>
 <div class=sec><h3>Today</h3><ul>{timeline}</ul></div>
 <div class=sec><h3>Weather</h3><div>{_e(w.summary)}</div>{f'<div class=clash>{_e(w.clash)}</div>' if w.clash else ''}
 {f'<div>Swap: {_e(w.suggested_swap)}</div>' if w.suggested_swap else ''}</div>
+<div class=sec><h3>Spend today</h3><div>{_e(b.spend_estimate.local)}{f' ({_e(b.spend_estimate.home)})' if b.spend_estimate.home else ''}</div>{'<div class=fine><a href="https://www.exchangerate-api.com">Rates By Exchange Rate API</a></div>' if b.spend_estimate.home else ''}</div>
+<div class=grp>Suggestions for today <span class=badge style="background:{badge[0]}">{badge[1]}{f' · {b.confidence.score}' if b.confidence.score is not None else ''}</span></div>
 <div class=sec><h3>Heads-ups</h3><ul>{heads}</ul></div>
 <div class=sec><h3>Ideas for you</h3>{ideas}</div>
-<div class=sec><h3>Spend today</h3><div>{_e(b.spend_estimate.local)}{f' ({_e(b.spend_estimate.home)})' if b.spend_estimate.home else ''}</div>{'<div class=fine><a href="https://www.exchangerate-api.com">Rates By Exchange Rate API</a></div>' if b.spend_estimate.home else ''}</div>
 <div class=sec><h3>Local tip</h3><div>{_e(b.local_tip)}</div></div>
 <div class=sec>{actions}</div></div></body></html>"""
 

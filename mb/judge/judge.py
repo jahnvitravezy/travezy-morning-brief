@@ -40,11 +40,18 @@ def _norm(t: str) -> str:
     return re.sub(r"\s+", " ", t.replace("’", "'").replace("‘", "'")).strip().lower()
 
 
+INVENTED_WORDS = ("invent", "not in the input", "not in inputs", "does not exist", "doesn't exist", "made up", "fabricat", "hallucinat")
+
+
 def confirm_serious(serious: list[str], brief: MorningBrief, ctx: Context) -> tuple[list[str], list[str]]:
     """(confirmed, dropped). A serious error stands only if it quotes the brief word for word and
     the quote isn't a line code computed (weather line, must-report checks)."""
     text = _norm(brief.model_dump_json())
     code_lines = [_norm(weather_summary(ctx))] + [_norm(line) for _, _, line in must_cover(ctx)]
+    # Places the brief may name: the plan, Google Places lookups and checked ideas. A judge that
+    # doesn't know a real place must not call it invented (blind review, 3 Nov: the Haiku judge).
+    verified = {_norm(_n) for _n in ([a.name for a in ctx.day.activities] + [c.name for c in ctx.candidates]
+                                     + [p.name for p in ctx.places.values() if p]) if len(_n) > 3}
     confirmed, dropped = [], []
     for s in serious:
         low = _norm(s)
@@ -55,6 +62,8 @@ def confirm_serious(serious: list[str], brief: MorningBrief, ctx: Context) -> tu
             dropped.append(f"{s} [not serious: quotes nothing from the brief]")
         elif all(any(q in c for c in code_lines) for q in quotes):
             dropped.append(f"{s} [not serious: about a fact code computed]")
+        elif any(w in low for w in INVENTED_WORDS) and any(v in q for q in quotes for v in verified):
+            dropped.append(f"{s} [not serious: the place is verified (plan or Google Places)]")
         else:
             confirmed.append(s)
     return confirmed, dropped

@@ -11,3 +11,8 @@ briefs_enabled: true          # kill switch: false (or env MB_KILL_SWITCH=1) sto
 places_hours_refresh_days: 3   # opening hours in the places table are re-checked after this many days
 places_search_refresh_days: 30  # an "ideas near here" search is repeated after this many days
 weather_provider: weatherapi      # weatherapi (WeatherAPI.com, key WEATHERAPI_KEY) or open_meteo
+retention_days:                 # python -m mb.db cleanup deletes rows older than this (run it daily)
+  outbox: 30                    # briefs: kept 30 days after they are prepared
+  cache: 30                     # weather, routes and search answers
+  place_searches: 30            # the places themselves are kept and refreshed (places_hours_refresh_days)
+  usage_ledger: 400             # paid-call records: 13 months, for invoices and the monthly budget

@@ -282,4 +282,42 @@ async def gather_candidates(ctx: Context, providers: list[CandidateProvider], ru
             if c.id not in seen:
                 seen.add(c.id)
                 out.append(c)
+    return meal_and_rest_filter(out, ctx.day.activities, ctx.preferences.pace.rest_after_lunch)
+
+
+REST_MIN = 90            # a family's rest break after lunch
+AFTER_MEAL_MIN = 120     # no food idea this soon after a planned meal ("a second lunch")
+
+
+def _is_food(c: Candidate) -> bool:
+    text = f"{c.name} {' '.join(c.types)}".lower()
+    return any(w in text for w in FOOD_WORDS)
+
+
+def meal_and_rest_filter(cands: list[Candidate], activities: list[Activity], rest_after_lunch: bool) -> list[Candidate]:
+    """Ideas never sit in a family's rest break, and food ideas never come straight after a meal.
+
+    Blind review (3 Nov): ideas clashed with a lunch or rest break, including a second lunch
+    straight after lunch. The rest break is the 90 minutes after a planned lunch (or 13:30-15:00
+    when no lunch is planned). An idea whose slot overlaps it keeps only the part outside it,
+    if that part still fits a visit."""
+    meals = [a for a in activities if a.kind == "eat"]
+    blocks = []
+    if rest_after_lunch:
+        lunch = next((a for a in meals if dt.time(11) <= a.start <= dt.time(15)), None)
+        start = _m(lunch.end or _t(_m(lunch.start) + 60)) if lunch else _m(dt.time(13, 30))
+        blocks.append((start, start + REST_MIN))
+    out = []
+    for c in cands:
+        a, b = _m(c.open_from or c.window.start), _m(c.window.end)
+        if _is_food(c) and any(_m(m.start) - 30 <= a < _m(m.end or _t(_m(m.start) + 60)) + AFTER_MEAL_MIN for m in meals):
+            continue
+        for x, y in blocks:
+            if a < y and x < b:                          # overlaps the rest break: keep the longer side
+                a, b = max([(a, min(b, x)), (max(a, y), b)], key=lambda s: s[1] - s[0])
+        if b - a < VISIT_MIN:
+            continue
+        if (a, b) != (_m(c.open_from or c.window.start), _m(c.window.end)):
+            c = c.model_copy(update={"open_from": _t(a), "window": c.window.model_copy(update={"end": _t(b)})})
+        out.append(c)
     return out
