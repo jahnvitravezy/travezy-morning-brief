@@ -59,10 +59,19 @@ events. Every idea must come from this verified list; the model can't add its ow
 | 1,000 | Briefs cluster around 07:30 in each time zone: up to 300 due in one window | 300 × 8 s ÷ 3 at a time = about 13 minutes, inside the 120-minute window, but close to provider rate limits at peak | Raise `--concurrency` to 10, prepare 3 hours ahead instead of 2, and spread calls across the window |
 | 10,000 | One batch process | One process can't keep up, and two cron runs would duplicate work | A Postgres job queue: each due brief becomes a row, several workers claim rows with `FOR UPDATE SKIP LOCKED`. Use the provider's batch API for briefs prepared hours ahead (about half the model price). Shared cache and places table already work across workers |
 
-**Delivery:** at 10,000 a day, the backend polling the outbox every minute still works (one indexed
-query), but a push is cleaner: when a brief is ready, the service calls a FastAPI endpoint on the
-backend (`POST /morning-brief`, with the API key and `brief_id` as the idempotency key), retrying
-with backoff. The outbox stays the source of truth, so nothing is lost if a push fails.
+**Delivery:** FastAPI stays on both sides; what changes with volume is the delivery pattern.
+
+- **Today, polling:** the backend reads the outbox every minute. Simple and reliable, but a brief
+  can wait up to a minute and the backend asks even when nothing is new.
+- **Up to about 1,000 a day, a webhook:** when a brief is ready, the service calls an endpoint on the
+  backend (`POST /morning-brief`, with the API key and `brief_id`), retrying with backoff.
+- **10,000 a day and beyond, a message queue** (Pub/Sub, SQS or Redis Streams, whichever the cloud
+  already uses): the service publishes each ready brief and a worker on the backend consumes it. The
+  queue absorbs the 07:30 bursts, retries by itself and lets either side be down for a while.
+
+In every case the outbox stays the record and `brief_id` is the idempotency key, so a brief
+delivered twice is sent once. Built so far: only `--concurrency`; the queue and the push are a plan,
+not load-tested, and real limits depend on the OpenAI account tier.
 
 ## Keys (1.11 and 2.3)
 
