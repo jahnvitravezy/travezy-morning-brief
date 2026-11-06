@@ -53,7 +53,7 @@ def calls_per_brief(rows: list[dict], n_ctx: int) -> dict[str, float]:
     calls = defaultdict(float)
     for r in rows:
         if r["kind"] == "api" and r["run_id"].startswith("ctx-"):
-            calls[r["item"]] += r["units"].get("calls", 1)
+            calls[r["item"]] += (r.get("units") or {}).get("calls", 1)
     return {k: v / n_ctx for k, v in calls.items()}
 
 
