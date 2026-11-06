@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "migrations"
 LOCK_ID = 726017
 _conn = None
+_conns: dict[str, object] = {}
 
 
 def enabled() -> bool:
@@ -48,11 +49,18 @@ def migrate(conn) -> list[str]:
     return applied
 
 
-def conn():
-    """One shared connection per process, migrated on first use."""
+def conn(url: str | None = None):
+    """One shared connection per process (per database address), migrated on first use."""
     global _conn
+    import psycopg
+    if url and url != os.environ.get("DATABASE_URL"):
+        c = _conns.get(url)
+        if c is None or c.closed:
+            c = psycopg.connect(url, autocommit=True)
+            migrate(c)
+            _conns[url] = c
+        return c
     if _conn is None or _conn.closed:
-        import psycopg
         c = psycopg.connect(os.environ["DATABASE_URL"], autocommit=True)
         migrate(c)
         _conn = c

@@ -326,3 +326,21 @@ def test_models_own_monkey_caution_is_not_doubled():
     c = c.model_copy(update={"day": c.day.model_copy(update={"activities": [monkey]})})
     out = ensure_covered(["Monkeys grab bags and food; keep everyone close, hold bags tightly."], c)
     assert sum("monkey" in h.lower() for h in out) == 1
+
+
+
+def test_temperature_in_a_tip_is_not_a_place():
+    from mb.agents.facts import tip_problems
+    c = ctx_for("dubai_up01", 1)
+    assert not [p for p in tip_problems("Carry water and sun cover: it reaches 31°C today.", c) if "names" in p]
+
+
+def test_code_dinner_line_replaces_the_models_vaguer_one():
+    from mb.agents.facts import ensure_covered, pace_checks
+    for trip, day in [("bali_up04", d) for d in range(5)] + [("dubai_up04", d) for d in range(4)]:
+        c = ctx_for(trip, day)
+        if any("usual dinner" in l for l in pace_checks(c)):
+            out = ensure_covered(["Dinner at the restaurant is later than your usual time."], c)
+            assert sum("dinner" in h.lower() for h in out) == 1
+            return
+    raise AssertionError("no test day with a late dinner")

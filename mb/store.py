@@ -89,7 +89,7 @@ class PostgresStore:
 
     def __init__(self, url: str | None = None):
         from mb import db
-        self.conn = db.conn()
+        self.conn = db.conn(url)
 
     def has(self, trip_id: str, date: str) -> bool:
         return self.conn.execute("SELECT 1 FROM outbox WHERE trip_id=%s AND date=%s", (trip_id, date)).fetchone() is not None

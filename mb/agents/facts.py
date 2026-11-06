@@ -404,6 +404,8 @@ def ensure_covered(heads_ups: list[str], ctx: Context) -> list[str]:
                 out = [h for h in out if not (_covers(h, name, []) and "clos" in h.lower())]
             if ", or try " in line:                   # a diet line with an alternative replaces the bare one
                 out = [h for h in out if not _covers(h, name, [])]
+            if "usual dinner" in line:                # code's dinner line replaces a model's vaguer one (B04, td.12)
+                out = [h for h in out if not ("dinner" in h.lower() and any(w in h.lower() for w in ("later", "usual", "late")))]
             out.append(line if line.endswith(".") else line + ".")
     return out
 
@@ -484,6 +486,7 @@ def tip_problems(tip: str, ctx: Context) -> list[str]:
     import re
     out = []
     known = known_names(ctx)
+    tip = re.sub(r"°\s*[CF]\b", "°", tip)        # "31°C" is a temperature, not a place called "C" (audit, 6 Nov)
     words = re.findall(r"[A-Za-z][\w'&-]*", tip)
     for i, w in enumerate(words):
         first = i == 0 or re.search(r"[.!?]\s*$", tip[:tip.find(w)])

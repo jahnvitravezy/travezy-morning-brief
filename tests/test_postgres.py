@@ -65,3 +65,23 @@ def test_outbox_by_send_time_fetch_and_mark_sent(pg):
     assert s.mark_sent("b1") and s.mark_sent("b1")
     assert s.due("2026-11-20T18:00:00+00:00", "2026-11-21T06:00:00+00:00") == []
     assert s.get("b1").sent_at is not None
+
+
+
+def test_migration_002_upgrades_a_database_that_already_has_briefs(monkeypatch):
+    """A database at 001 with briefs in it: 002 adds brief_id (filled from each brief) and sent_at."""
+    import psycopg
+    from mb import db
+    monkeypatch.setenv("MB_DB_SCHEMA", "mb_upgrade")
+    with psycopg.connect(URL, autocommit=True) as c:
+        c.execute("DROP SCHEMA IF EXISTS mb_upgrade CASCADE")
+        c.execute("CREATE SCHEMA mb_upgrade")
+        c.execute("SET search_path TO mb_upgrade")
+        c.execute("CREATE TABLE schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())")
+        c.execute((db.MIGRATIONS / "001_init.sql").read_text(encoding="utf-8"))
+        c.execute("INSERT INTO schema_migrations (name) VALUES ('001_init.sql')")
+        c.execute("""INSERT INTO outbox (trip_id, date, timezone, send_at_local, send_at_utc, brief)
+                     VALUES ('t', '2026-11-21', 'Asia/Dubai', '07:30', '2026-11-21T03:30:00Z', '{"brief_id": "old1"}')""")
+        assert db.migrate(c) == ["002_outbox_delivery.sql"]
+        assert c.execute("SELECT brief_id, sent_at FROM outbox").fetchone() == ("old1", None)
+        assert db.migrate(c) == []                                   # running it again changes nothing

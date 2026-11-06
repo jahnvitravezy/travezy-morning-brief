@@ -88,11 +88,22 @@ def test_postgres_store_round_trip():
 
 
 @pytest.mark.skipif(not os.environ.get("TEST_DATABASE_URL"), reason="needs a Postgres (TEST_DATABASE_URL)")
-def test_two_stores_starting_together_do_not_crash():
+def test_six_processes_migrating_together_do_not_crash(monkeypatch):
+    """The API and batch runs can start at the same moment: the migration lock makes them take turns."""
     from concurrent.futures import ThreadPoolExecutor
-    from mb.store import PostgresStore
+    import psycopg
+    from mb import db
     url = os.environ["TEST_DATABASE_URL"]
-    PostgresStore(url).conn.execute("DROP TABLE IF EXISTS outbox")
+    monkeypatch.setenv("MB_DB_SCHEMA", "mb_race")
+    with psycopg.connect(url, autocommit=True) as c:
+        c.execute("DROP SCHEMA IF EXISTS mb_race CASCADE")
+
+    def start(_):
+        with psycopg.connect(url, autocommit=True) as c:
+            db.migrate(c)
+            return c.execute("SELECT count(*) FROM schema_migrations").fetchone()[0]
+
     with ThreadPoolExecutor(6) as ex:
-        stores = list(ex.map(lambda _: PostgresStore(url), range(6)))
-    assert all(s.has("nobody", "2026-01-01") is False for s in stores)
+        counts = list(ex.map(start, range(6)))
+    n = len(list(db.MIGRATIONS.glob("*.sql")))
+    assert counts == [n] * 6
