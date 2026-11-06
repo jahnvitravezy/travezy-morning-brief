@@ -41,8 +41,9 @@ def _ledger_rows(ledger: Path) -> list[dict]:
     from mb import db
     rows = []
     if db.enabled():
-        rows += [{"run_id": r[0], "kind": r[1], "item": r[2], "cost_usd": float(r[3]), "units": r[4] or {}}
-                 for r in db.conn().execute("SELECT run_id, kind, item, cost_usd, units FROM usage_ledger").fetchall()]
+        rows += [{"run_id": r[0], "kind": r[1], "item": r[2], "cost_usd": float(r[3]), "units": r[4] or {},
+                  "ts": r[5].timestamp()}
+                 for r in db.conn().execute("SELECT run_id, kind, item, cost_usd, units, ts FROM usage_ledger").fetchall()]
     if ledger.exists():
         rows += [json.loads(l) for l in ledger.read_text(encoding="utf-8").splitlines() if l.strip()]
     return rows
@@ -50,11 +51,16 @@ def _ledger_rows(ledger: Path) -> list[dict]:
 
 def calls_per_brief(rows: list[dict], n_ctx: int) -> dict[str, float]:
     """Paid data calls per brief when building the test days' facts from nothing."""
-    calls = defaultdict(float)
+    calls, stamps = defaultdict(float), []
     for r in rows:
         if r["kind"] == "api" and r["run_id"].startswith("ctx-"):
             calls[r["item"]] += (r.get("units") or {}).get("calls", 1)
-    return {k: v / n_ctx for k, v in calls.items()}
+            stamps.append(r.get("ts", 0))
+    # Every rebuild of the test set logs under the same run_id, so count rebuilds as bursts of calls
+    # more than 30 minutes apart, and average over them instead of adding them up.
+    stamps.sort()
+    rebuilds = 1 + sum(1 for a, b in zip(stamps, stamps[1:]) if b - a > 1800) if stamps else 1
+    return {k: v / (n_ctx * rebuilds) for k, v in calls.items()}
 
 
 def measure(run: str = "cmp-baseline-gpt4o", ledger: Path = LEDGER, runs: Path = RUNS) -> dict:

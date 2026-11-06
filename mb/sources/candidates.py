@@ -81,6 +81,11 @@ def queries_for(ctx: Context) -> list[str]:
         phrase = RULES.interest_queries.get(interest.lower(), interest)
         food = any(w in phrase.lower() for w in FOOD_WORDS)
         out.append(f"{'vegetarian ' if veg and food else ''}{phrase}")
+    km = ctx.preferences.pace.max_walk_km
+    if km and km <= 3:
+        # Short walking limit: only seated ideas pass walking_filter, so search for them too,
+        # or the day ends up with none (v11: 12 of 22 days had no idea).
+        out[-1] = f"{'vegetarian ' if veg else ''}cafes and museums"
     return out
 
 

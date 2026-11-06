@@ -45,3 +45,12 @@ def test_short_walking_limit_drops_walking_ideas():
     museum = cand("Coffee Museum", T(10), T(12), ["museum"])
     assert [c.name for c in walking_filter([walk, district, museum], 2)] == ["Coffee Museum"]
     assert len(walking_filter([walk, district, museum], 5)) == 3
+
+
+def test_short_walking_limit_searches_for_seated_ideas():
+    from mb.context import build_context
+    from mb.sources.candidates import queries_for
+    from mb.sources.itinerary import FileLoader
+    c = build_context(FileLoader().load("dubai_up04"), 1)
+    if c.preferences.pace.max_walk_km and c.preferences.pace.max_walk_km <= 3:
+        assert "cafes and museums" in queries_for(c)[-1]
