@@ -365,7 +365,11 @@ def must_cover(ctx: Context) -> list[tuple[list[str], list[str], str]]:
     for line in access_checks(ctx):
         name = next(n for n in acts if line.startswith(n))
         out.append((name_words(name), ["steep", "stairs", "steps", "uneven"], line))
-    out += [(["jain"] if line.startswith("Jain") else ["veg"], [], line) for line in diet_checks(ctx)]  # any Jain / veg line covers it
+    for line in diet_checks(ctx):
+        # Any Jain / veg line covers it, unless code found a checked alternative: then the line must
+        # name it (blind review, 6 Nov: the model's "ask for Jain options" hid the alternative).
+        alt = line.split(", or try ", 1)[1].split(" (")[0].lower() if ", or try " in line else None
+        out.append((["jain"] if line.startswith("Jain") else ["veg"], [alt] if alt else [], line))
     for line in walk_checks(ctx):
         name = next(n for n in acts if line.startswith(n))
         out.append((name_words(name), ["walk", "taxi", "break"], line))
@@ -395,6 +399,8 @@ def ensure_covered(heads_ups: list[str], ctx: Context) -> list[str]:
         if not any(_covers(h, name, topic) for h in out):
             if line.startswith("Leave "):             # a closing time: replace "closes at 17:00, adjust" lines
                 out = [h for h in out if not (_covers(h, name, []) and "clos" in h.lower())]
+            if ", or try " in line:                   # a diet line with an alternative replaces the bare one
+                out = [h for h in out if not _covers(h, name, [])]
             out.append(line if line.endswith(".") else line + ".")
     return out
 

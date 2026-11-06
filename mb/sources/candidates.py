@@ -286,14 +286,18 @@ async def gather_candidates(ctx: Context, providers: list[CandidateProvider], ru
     return walking_filter(out, ctx.preferences.pace.max_walk_km)
 
 
-WALKING_IDEA = ("walk", "trail", "hike", "trek", "walking tour")
+SEATED_IDEA = ("museum", "gallery", "aquarium", "cinema", "theater", "theatre", "spa", "cafe", "coffee",
+               "restaurant", "bakery", "tea", "dessert", "show", "observation", "viewpoint")
 
 
 def walking_filter(cands: list[Candidate], max_walk_km: float | None) -> list[Candidate]:
-    """With a short walking limit (3 km or less), no idea that is itself a walk or hike."""
+    """With a short walking limit (3 km or less), only ideas you can mostly do sitting or standing in
+    one place: museums, cafes, shows, viewpoints. Blind review (6 Nov): a 2 km couple got Al Fahidi,
+    a walking district, whose name has no "walk" in it, so a blocklist wasn't enough."""
     if not max_walk_km or max_walk_km > 3:
         return cands
-    return [c for c in cands if not any(w in f"{c.name} {c.snippet} {' '.join(c.types)}".lower() for w in WALKING_IDEA)]
+    return [c for c in cands
+            if any(w in f"{c.name} {' '.join(c.types)}".lower().replace("_", " ") for w in SEATED_IDEA)]
 
 
 REST_MIN = 90            # a family's rest break after lunch

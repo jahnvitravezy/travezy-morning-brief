@@ -2,13 +2,13 @@
 # who: children (anyone with children_ages), older (a traveller in their 60s or above), all.
 - match: [monkey]
   who: [children, all]
-  topic: [monkey]
+  topic: [bags, feed, grab, touch]       # not words from the place name
   line: "{place}: the monkeys grab bags and food; keep {children} close, hold bags tightly and don't feed or touch them"
 - match: [dune bash, dune-bash, desert safari]
   who: [older, children]
-  topic: [dune, bumpy, rough]
+  topic: [bumpy, rough, gentle, sit it out]
   line: "{place}: dune bashing is a rough, bumpy ride; ask for a gentle drive or sit it out if anyone has back, neck or heart concerns"
 - match: [hike, trek]
   who: [older, children]
-  topic: [hike, trek, walk]
+  topic: [water, rest stop, turn back]
   line: "{place}: a hike, so take water and rest stops, and turn back early if it feels too long"

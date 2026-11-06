@@ -41,6 +41,7 @@ def test_rest_break_is_kept_free_when_no_lunch_is_planned():
 def test_short_walking_limit_drops_walking_ideas():
     from mb.sources.candidates import walking_filter
     walk = cand("Heritage walking tour", T(10), T(12), ["tourist_attraction"])
+    district = cand("Al Fahidi Historical Neighbourhood", T(10), T(12), ["historical_landmark"])
     museum = cand("Coffee Museum", T(10), T(12), ["museum"])
-    assert [c.name for c in walking_filter([walk, museum], 2)] == ["Coffee Museum"]
-    assert len(walking_filter([walk, museum], 5)) == 2
+    assert [c.name for c in walking_filter([walk, district, museum], 2)] == ["Coffee Museum"]
+    assert len(walking_filter([walk, district, museum], 5)) == 3

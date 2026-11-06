@@ -290,3 +290,28 @@ def test_judge_cannot_call_a_verified_place_invented():
     brief.heads_ups.append(f"Visit {place} early")
     ok, dropped = confirm_serious([f'"Visit {place} early" names a place not in the inputs: invented'], brief, c)
     assert ok == [] and "verified" in dropped[0]
+
+
+
+def test_model_diet_line_is_replaced_when_code_has_an_alternative():
+    from mb.contracts import Candidate, Window
+    from mb.agents.facts import ensure_covered
+    c = ctx_for("dubai_up01", 1)
+    alt = Candidate(id="places:v", provider="google_places", name="Rangoli Veg Kitchen",
+                    window=Window(start=dt.time(14), end=dt.time(16)), types=["vegetarian_restaurant"])
+    c = c.model_copy(update={"candidates": [alt]})
+    meal = next(a.name for a in c.day.activities if a.kind == "eat" and "veg" not in f"{a.name} {a.note}".lower())
+    out = ensure_covered([f"You're vegetarian: {meal}, ask for veg options first."], c)
+    veg = [h for h in out if "veg" in h.lower()]
+    assert len(veg) == 1 and "Rangoli Veg Kitchen" in veg[0]
+
+
+def test_monkey_caution_is_added_even_when_another_line_names_the_forest():
+    from mb.agents.facts import ensure_covered
+    from mb.contracts import Activity, Party
+    c = ctx_for("bali_up02", 1)
+    monkey = Activity(id="m", kind="do", start=dt.time(16), end=dt.time(17, 30), name="Sacred Monkey Forest Sanctuary")
+    c = _with_prefs(c, party=Party(adults=2, children_ages=[6, 10]))
+    c = c.model_copy(update={"day": c.day.model_copy(update={"activities": [monkey]})})
+    out = ensure_covered(["Leave Sacred Monkey Forest Sanctuary by 17:00: it closes before your planned finish."], c)
+    assert any("keep the children (6 and 10) close" in h for h in out)
