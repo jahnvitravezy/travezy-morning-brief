@@ -46,10 +46,16 @@ def read_reviewer(path: Path) -> dict[str, dict]:
         rows = list(csv.DictReader(path.open(encoding="utf-8-sig")))
     else:
         from openpyxl import load_workbook
-        ws = load_workbook(path, read_only=True).active
-        it = ws.iter_rows(values_only=True)
-        head = [str(h).strip().lower() for h in next(it)]
-        rows = [dict(zip(head, r)) for r in it if r and r[0]]
+        wb = load_workbook(path, read_only=True)
+        # The scores are on whichever sheet has a "decision" column (Travezy's file opens on
+        # "How to score", so the first sheet isn't it: 6 Nov).
+        rows = []
+        for ws in wb.worksheets:
+            it = ws.iter_rows(values_only=True)
+            head = [str(h).strip().lower() for h in (next(it, None) or [])]
+            if "decision" in head and "code" in head:
+                rows = [dict(zip(head, r)) for r in it if r and r[0]]
+                break
     out = {}
     for r in rows:
         r = {str(k).strip().lower(): v for k, v in r.items()}

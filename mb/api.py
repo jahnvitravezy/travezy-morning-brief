@@ -51,8 +51,15 @@ app = FastAPI(title="Travezy Morning Brief", version="0.1", lifespan=lifespan,
 
 @app.get("/health")
 async def health():
+    """Open, for load balancers and uptime checks: says only that the service is up."""
+    return {"ok": True}
+
+
+@app.get("/status", dependencies=[Depends(require_key)])
+async def status():
+    """This month's spend and models nearing end of life (behind the API key)."""
     s = app.state.services
-    return {"ok": True, "budget": s.budget.status(), "model_warnings": s.model_warnings}
+    return {"budget": s.budget.status(), "model_warnings": s.model_warnings}
 
 
 @app.get("/trips", dependencies=[Depends(require_key)])
@@ -103,6 +110,32 @@ async def judge(req: JudgeRequest):
     except BudgetExceeded as e:
         raise HTTPException(503, f"Usage budget reached: {e}")
     return verdict
+
+
+@app.get("/outbox", dependencies=[Depends(require_key)])
+async def outbox_due(due_from: dt.datetime, due_to: dt.datetime, include_sent: bool = False):
+    """Briefs whose send time (UTC) is in [due_from, due_to): what the backend should send next.
+    Early briefs can go out the evening before in UTC, so the backend asks by send time, not trip date."""
+    items = app.state.store.due(due_from.isoformat(), due_to.isoformat(), unsent_only=not include_sent)
+    return [{k: v for k, v in vars(i).items() if k != "brief"} | {"title": i.brief["notification"]["title"]}
+            for i in items]
+
+
+@app.get("/briefs/{brief_id}", dependencies=[Depends(require_key)])
+async def stored_brief(brief_id: str):
+    """One stored brief, as JSON, with its send time and whether it has been sent."""
+    item = app.state.store.get(brief_id)
+    if item is None:
+        raise HTTPException(404, f"No stored brief {brief_id}")
+    return {"brief_id": item.brief_id, "send_at_utc": item.send_at_utc, "sent_at": item.sent_at, "brief": item.brief}
+
+
+@app.post("/briefs/{brief_id}/sent", dependencies=[Depends(require_key)])
+async def mark_sent(brief_id: str):
+    """The backend calls this after sending. Safe to call twice."""
+    if not app.state.store.mark_sent(brief_id):
+        raise HTTPException(404, f"No stored brief {brief_id}")
+    return {"brief_id": brief_id, "sent": True}
 
 
 @app.get("/outbox/{date}", dependencies=[Depends(require_key)])

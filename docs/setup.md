@@ -179,5 +179,5 @@ and left out of what the tool reads.
   downloaded packages are kept, so it picks up where it left off.
 - **A run is marked invalid**: the check before the run found a missing key, a quota limit or a
   setting the model doesn't accept. The reason is in the run's records.
-- **"Budget reached"**: the guard has stopped new paid calls. Only raise `budget_inr` once
+- **"Budget reached"**: the guard has stopped new paid calls. Only raise `monthly_budget_inr` once
   that's been agreed.

@@ -30,3 +30,17 @@ def test_idea_only_in_the_rest_break_is_dropped():
     short = cand("Park", T(13, 30), T(15, 0), ["park"])
     assert meal_and_rest_filter([short], [LUNCH], rest_after_lunch=True) == []
     assert VISIT_MIN <= 90
+
+
+def test_rest_break_is_kept_free_when_no_lunch_is_planned():
+    # No lunch in the plan: the default lunch window (rest 13:30-15:00) still applies (B18, 6 Nov)
+    out = meal_and_rest_filter([cand("Aquarium", T(13, 30), T(15, 0), ["aquarium"])], [], rest_after_lunch=True)
+    assert out == []
+
+
+def test_short_walking_limit_drops_walking_ideas():
+    from mb.sources.candidates import walking_filter
+    walk = cand("Heritage walking tour", T(10), T(12), ["tourist_attraction"])
+    museum = cand("Coffee Museum", T(10), T(12), ["museum"])
+    assert [c.name for c in walking_filter([walk, museum], 2)] == ["Coffee Museum"]
+    assert len(walking_filter([walk, museum], 5)) == 2

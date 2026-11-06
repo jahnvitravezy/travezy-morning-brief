@@ -282,7 +282,18 @@ async def gather_candidates(ctx: Context, providers: list[CandidateProvider], ru
             if c.id not in seen:
                 seen.add(c.id)
                 out.append(c)
-    return meal_and_rest_filter(out, ctx.day.activities, ctx.preferences.pace.rest_after_lunch)
+    out = meal_and_rest_filter(out, ctx.day.activities, ctx.preferences.pace.rest_after_lunch)
+    return walking_filter(out, ctx.preferences.pace.max_walk_km)
+
+
+WALKING_IDEA = ("walk", "trail", "hike", "trek", "walking tour")
+
+
+def walking_filter(cands: list[Candidate], max_walk_km: float | None) -> list[Candidate]:
+    """With a short walking limit (3 km or less), no idea that is itself a walk or hike."""
+    if not max_walk_km or max_walk_km > 3:
+        return cands
+    return [c for c in cands if not any(w in f"{c.name} {c.snippet} {' '.join(c.types)}".lower() for w in WALKING_IDEA)]
 
 
 REST_MIN = 90            # a family's rest break after lunch

@@ -45,7 +45,7 @@ And in the six detailed layers:
 | Capability | The model gateway (LiteLLM and Instructor), the registry of agents, models and sources, versioned prompts, timeouts and retries |
 | Intelligence | Summariser, Surprise finder, Composer |
 | Experience | The brief, the notification title and text, the full brief, the preview, the send time |
-| Governance | The judge and rubric, the evaluation and scorecard, cost and speed tracking, the budget cap, the kill switch, notification controls, privacy |
+| Governance | The judge and rubric, the evaluation and scorecard, cost and speed tracking, the monthly budget with alerts and a hard stop, the kill switch, notification controls, privacy |
 
 ## 4. The four agents
 
@@ -161,7 +161,7 @@ stand-ins and don't replace the real review.
 | Opting out of a trip | Travezy's backend holds that setting and simply doesn't ask for or send a brief for that trip |
 | No duplicates | The outbox writes safely even if two workers run at once (an upsert with an advisory lock) |
 | Kill switch | `briefs_enabled: false` in `config/app.yaml`, or `MB_KILL_SWITCH=1`, stops every new brief: the API returns 503 and the batch skips |
-| Cost cap | A budget guard checks the likely cost before every paid call and refuses to go over the cap. Every call is logged |
+| Monthly budget | Alerts at 50% and 80% of the monthly budget (each once a month) and one hard stop at 100%: a guard checks the likely cost before every paid call. Every call is logged in Postgres |
 
 ## 8. Privacy
 
@@ -211,8 +211,9 @@ in the cost report use the dated rate in `config/app.yaml`.
 ## 11. Still to decide
 
 1. The green and amber pass marks, set against Travezy's reviewer.
-2. Which judge goes into production, chosen by how well it agrees with that reviewer.
-3. The Surprise finder model: GPT-4o, or the cheaper GPT-4.1 mini.
-4. How long to keep briefs and logs.
-5. A commercial plan for Open-Meteo in production.
-6. Meal and rest times: ideas don't yet avoid a family's lunch or rest break.
+2. Which judge goes into production: agreement with Travezy's 6 Nov verdicts is in `docs/build_log.md`.
+3. The replacement models for the January 2027 retirements (gpt-5-mini results in `docs/build_log.md`).
+
+Settled since the walkthrough: retention (`python -m mb.db cleanup`, see `docs/production_notes.md`),
+meal and rest times (ideas avoid a family's rest break and a second lunch), and weather (WeatherAPI.com,
+which Travezy already licenses).

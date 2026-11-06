@@ -174,3 +174,20 @@ def test_unconfirmed_serious_errors_do_not_fail_a_brief(ctx):
     ok, dropped = confirm_serious([real, no_quote, unpublished, made_up], brief, ctx)
     assert ok == [real]
     assert len(dropped) == 3 and all("[not serious:" in d for d in dropped)
+
+
+def test_missing_mentions_and_timeline_quotes_are_not_serious():
+    from mb.agents.composer import safe_version
+    from mb.context import build_context
+    from mb.judge.judge import confirm_serious
+    from mb.sources.itinerary import FileLoader
+    ctx = build_context(FileLoader().load("bali_up04"), 1)
+    brief = safe_version(ctx, "t")
+    t = brief.timeline[0]
+    omission = f"The brief states '{t.time} {t.name}' but fails to mention the steep path"
+    timeline = f"The timeline states '{t.time} {t.name}', but that is the wrong time"
+    brief.local_tip = "Swimming is not advised at Crystal Bay"
+    claim = "The brief states 'Swimming is not advised at Crystal Bay', but nothing in the inputs says so"
+    ok, dropped = confirm_serious([omission, timeline, claim], brief, ctx)
+    assert ok == [claim]                                  # a model's unsupported claim still counts
+    assert any("missing mention" in d for d in dropped) and len(dropped) == 2

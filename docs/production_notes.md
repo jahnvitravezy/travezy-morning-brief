@@ -13,8 +13,17 @@ Settings named here live in `config/`, so none of them needs a code change.
 - **Who triggers it:** Travezy's scheduler (a cron job on the backend server, Kubernetes CronJob or
   Cloud Scheduler), running the service's container with the command above. A second daily job
   runs `python -m mb.db cleanup` (retention, below).
-- **Delivery:** the backend reads `GET /outbox/{date}` every minute and sends each brief at its
-  `send_at_utc`. Each brief has a stable `brief_id`, so a retried send is easy to de-duplicate.
+- **Delivery:** every minute the backend asks `GET /outbox?due_from=<now>&due_to=<now+5 min>` (UTC send
+  times, unsent briefs only), reads each one with `GET /briefs/{brief_id}`, sends it, then calls
+  `POST /briefs/{brief_id}/sent`. Early briefs can go out the evening before in UTC, which is why the
+  query is by send time, not trip date. `brief_id` is the idempotency key; marking sent twice is safe.
+- **Loader:** each run asks the loader only for trips with a day in the coming window
+  (`trips_with_day_between`, an API call with `day_from` and `day_to`, see `docs/loader_spec.md`), so
+  the batch never loads every trip.
+- **Production settings:** set `MB_ENV=production`. Then the API key is accepted only as the
+  `X-API-Key` header (never in a URL, which can end up in logs). Stored test weather is off unless the
+  batch is run with `--scenarios` (demos and tests only). `/health` returns only `{"ok": true}`;
+  spend and model warnings are at `GET /status`, behind the key.
 
 ## If the backend misses a send time, or the service is down at 07:00 (4.3)
 
@@ -57,7 +66,7 @@ events. Every idea must come from this verified list; the model can't add its ow
 |---|---|---|---|
 | 100 | One batch every 15 min, 3 briefs at a time, about 8 s each | Nothing | Nothing |
 | 1,000 | Briefs cluster around 07:30 in each time zone: up to 300 due in one window | 300 × 8 s ÷ 3 at a time = about 13 minutes, inside the 120-minute window, but close to provider rate limits at peak | Raise `--concurrency` to 10, prepare 3 hours ahead instead of 2, and spread calls across the window |
-| 10,000 | One batch process | One process can't keep up, and two cron runs would duplicate work | A Postgres job queue: each due brief becomes a row, several workers claim rows with `FOR UPDATE SKIP LOCKED`. Use the provider's batch API for briefs prepared hours ahead (about half the model price). Shared cache and places table already work across workers |
+| 10,000 | One batch process, one database connection per process | One process can't keep up, and two cron runs would duplicate work | A Postgres job queue: each due brief becomes a row, several workers claim rows with `FOR UPDATE SKIP LOCKED`. Use the provider's batch API for briefs prepared hours ahead (about half the model price). Replace the single database connection per process with a connection pool (psycopg_pool), sized to the workers. Shared cache and places table already work across workers |
 
 **Delivery:** FastAPI stays on both sides; what changes with volume is the delivery pattern.
 

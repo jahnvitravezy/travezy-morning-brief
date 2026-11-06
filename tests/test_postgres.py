@@ -53,3 +53,15 @@ def test_cleanup_deletes_only_what_is_past_retention(pg):
                " ('w','new','{}', now())")
     out = db.cleanup(pg, {"outbox": 30, "cache": 30, "place_searches": 30, "usage_ledger": 400})
     assert out["cache"] == 1 and pg.execute("SELECT count(*) FROM cache").fetchone()[0] == 1
+
+
+def test_outbox_by_send_time_fetch_and_mark_sent(pg):
+    from mb.store import OutboxItem, PostgresStore
+    s = PostgresStore()
+    s.save(OutboxItem("t1", "2026-11-21", "Asia/Dubai", "07:30", "2026-11-21T03:30:00+00:00", "pass", 90, "green",
+                      {"brief_id": "b1", "notification": {"title": "x"}}, brief_id="b1"))
+    assert [i.brief_id for i in s.due("2026-11-20T18:00:00+00:00", "2026-11-21T06:00:00+00:00")] == ["b1"]
+    assert s.get("b1").brief["brief_id"] == "b1"
+    assert s.mark_sent("b1") and s.mark_sent("b1")
+    assert s.due("2026-11-20T18:00:00+00:00", "2026-11-21T06:00:00+00:00") == []
+    assert s.get("b1").sent_at is not None

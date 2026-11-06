@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Protocol
 
@@ -129,6 +129,7 @@ def parse_trip(trip_id: str, itinerary_id: str, raw: dict, prefs: Preferences) -
 
 class ItineraryLoader(Protocol):
     def trip_ids(self) -> list[str]: ...
+    def trips_with_day_between(self, first: date, last: date) -> list[str]: ...  # API: GET /trips?day_from=&day_to=
     def load(self, trip_id: str) -> Trip: ...
 
 
@@ -142,6 +143,10 @@ class FileLoader:
 
     def trip_ids(self) -> list[str]:
         return sorted(self.trips)
+
+    def trips_with_day_between(self, first: date, last: date) -> list[str]:
+        """Only trips with a day in [first, last]: the batch never loads every trip."""
+        return [t for t in self.trip_ids() if any(first <= d.date <= last for d in self.load(t).days)]
 
     def load(self, trip_id: str) -> Trip:
         if trip_id not in self.trips:

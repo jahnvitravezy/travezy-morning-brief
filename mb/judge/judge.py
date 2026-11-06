@@ -40,6 +40,8 @@ def _norm(t: str) -> str:
     return re.sub(r"\s+", " ", t.replace("’", "'").replace("‘", "'")).strip().lower()
 
 
+OMISSION_WORDS = ("does not mention", "doesn't mention", "fails to mention", "not mention", "omits", "omitted",
+                  "does not include", "doesn't include", "is missing", "no mention")
 INVENTED_WORDS = ("invent", "not in the input", "not in inputs", "does not exist", "doesn't exist", "made up", "fabricat", "hallucinat")
 
 
@@ -47,7 +49,10 @@ def confirm_serious(serious: list[str], brief: MorningBrief, ctx: Context) -> tu
     """(confirmed, dropped). A serious error stands only if it quotes the brief word for word and
     the quote isn't a line code computed (weather line, must-report checks)."""
     text = _norm(brief.model_dump_json())
-    code_lines = [_norm(weather_summary(ctx))] + [_norm(line) for _, _, line in must_cover(ctx)]
+    # Lines code wrote: the weather line, the must-say checks, and the timeline (times and travel
+    # minutes come from the plan and routes, never from a model).
+    code_lines = ([_norm(weather_summary(ctx))] + [_norm(line) for _, _, line in must_cover(ctx)]
+                  + [_norm(f"{t.time} {t.name}") for t in brief.timeline] + [_norm(t.name) for t in brief.timeline])
     # Places the brief may name: the plan, Google Places lookups and checked ideas. A judge that
     # doesn't know a real place must not call it invented (blind review, 3 Nov: the Haiku judge).
     verified = {_norm(_n) for _n in ([a.name for a in ctx.day.activities] + [c.name for c in ctx.candidates]
@@ -58,6 +63,10 @@ def confirm_serious(serious: list[str], brief: MorningBrief, ctx: Context) -> tu
         quotes = [q for q in (_norm(m) for m in QUOTE.findall(s)) if q in text]
         if any(w in low for w in NEVER_SERIOUS):
             dropped.append(f"{s} [not serious: on the never-serious list]")
+        elif any(w in low for w in OMISSION_WORDS):
+            # "Doesn't mention the 17:00 closing": must-say facts are enforced by code (rule check and
+            # ensure_covered), so a missing mention is a fix, not a serious error (gpt-5-mini runs, 6 Nov).
+            dropped.append(f"{s} [not serious: a missing mention; code enforces must-say facts]")
         elif not quotes:
             dropped.append(f"{s} [not serious: quotes nothing from the brief]")
         elif all(any(q in c for c in code_lines) for q in quotes):

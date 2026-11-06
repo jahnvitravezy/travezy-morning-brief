@@ -189,6 +189,13 @@ def suggested_swap(ctx: Context) -> str | None:
             slots = swap_slots(ctx, a)
             if slots:
                 return f"Move {a.name} to {slots[0]}"
+            # No dry, open slot today: offer a checked indoor idea instead (blind review, 6 Nov:
+            # no rain or heat clash in the pack got a swap).
+            indoor = next((c for c in ctx.candidates
+                           if any(w in f"{c.name} {' '.join(c.types)}".lower().replace("_", " ") for w in INDOOR_WORDS)), None)
+            if indoor:
+                return (f"If the weather turns, swap {a.name} for {indoor.name} "
+                        f"(indoor, {indoor.window.start:%H:%M}-{indoor.window.end:%H:%M})")
             return None
     return None
 
@@ -212,8 +219,10 @@ def diet_checks(ctx: Context) -> list[str]:
         meals = [a.name for a in ctx.day.activities if a.kind == "eat" and "jain" not in a.note.lower()]
         if not meals:
             return []
-        return [f"Jain food: ask {' and '.join(meals)} for dishes without onion, garlic or root vegetables"
-                + _diet_alternative(ctx, ("jain",))]
+        alt = _diet_alternative(ctx, ("jain",)) or _diet_alternative(ctx, ("vegetarian", "vegan", "pure veg"))
+        if alt and "jain" not in alt.lower():
+            alt += ", a vegetarian place: ask for Jain preparation"
+        return [f"Jain food: ask {' and '.join(meals)} for dishes without onion, garlic or root vegetables" + alt]
     if r & {"vegetarian", "vegan"}:
         # Every planned meal not already marked vegetarian gets a check (stand-in review: B04, B06, B11)
         word = "vegan" if "vegan" in r else "vegetarian"
@@ -244,6 +253,53 @@ def access_checks(ctx: Context) -> list[str]:
             out.append(f"{a.name}: steep path, enjoy it from the top instead of climbing down" if steep
                        else f"{a.name}: uneven paths, take it slowly and stay near the viewpoint")
     return out
+
+
+OLDER = re.compile(r"\b(6\d|7\d|8\d)s?\b|senior|elderly|retired", re.I)
+WALK_WORDS = ("walk", "walking", "stroll", "hike", "trek", "on foot", "souk", "old town", "heritage", "mall")
+
+
+def _older(ctx: Context) -> bool:
+    return bool(OLDER.search(ctx.preferences.who or ""))
+
+
+def _safety_rules() -> list[dict]:
+    import yaml
+    from mb.config import CONFIG_DIR
+    return yaml.safe_load((CONFIG_DIR / "safety.yaml").read_text(encoding="utf-8")) or []
+
+
+def walk_checks(ctx: Context) -> list[str]:
+    """The trip's walking limit (pace.max_walk_km) against stops that mean a lot of walking.
+    Blind review (6 Nov): a couple in their 60s with a 2 km limit got long walks with no caution."""
+    km = ctx.preferences.pace.max_walk_km
+    if not km:
+        return []
+    out = []
+    for a in ctx.day.activities:
+        if a.kind in ("do", "eat") and any(w in f"{a.name} {a.note}".lower() for w in WALK_WORDS):
+            out.append(f"{a.name}: a lot of walking for your {km:g} km limit; take breaks, "
+                       f"or a taxi between parts of it")
+    return out
+
+
+def safety_items(ctx: Context) -> list[tuple[str, str, list[str]]]:
+    """(stop, caution, topic words) from config/safety.yaml, only for the travellers each applies to.
+    A rule with "all" applies to everyone; otherwise it needs children or an older traveller."""
+    kids = ctx.preferences.party.children_ages
+    who = {"all"} | ({"children"} if kids else set()) | ({"older"} if _older(ctx) else set())
+    children = f"the children ({' and '.join(map(str, kids))})" if kids else "everyone"
+    out = []
+    for a in ctx.day.activities:
+        text = f"{a.name} {a.note}".lower()
+        r = next((r for r in _safety_rules() if any(m in text for m in r["match"]) and who & set(r["who"])), None)
+        if r:
+            out.append((a.name, r["line"].format(place=a.name, children=children), r["topic"]))
+    return out
+
+
+def safety_checks(ctx: Context) -> list[str]:
+    return [line for _, line, _ in safety_items(ctx)]
 
 
 def airport_checks(ctx: Context) -> list[str]:
@@ -310,6 +366,10 @@ def must_cover(ctx: Context) -> list[tuple[list[str], list[str], str]]:
         name = next(n for n in acts if line.startswith(n))
         out.append((name_words(name), ["steep", "stairs", "steps", "uneven"], line))
     out += [(["jain"] if line.startswith("Jain") else ["veg"], [], line) for line in diet_checks(ctx)]  # any Jain / veg line covers it
+    for line in walk_checks(ctx):
+        name = next(n for n in acts if line.startswith(n))
+        out.append((name_words(name), ["walk", "taxi", "break"], line))
+    out += [(name_words(name), topic, line) for name, line, topic in safety_items(ctx)]
     out += [(["airport"], ["leave", "by"], line) for line in airport_checks(ctx)]
     out += [(["rain"], ["indoor", "inside", "spa", "shopping", "umbrella"], line) for line in free_day_weather(ctx)]
     for a in ctx.day.activities:

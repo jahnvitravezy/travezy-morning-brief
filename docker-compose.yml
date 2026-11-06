@@ -6,9 +6,6 @@ services:
       DATABASE_URL: postgresql://mb:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/mb   # the outbox lives in Postgres
     ports:
       - "8000:8000"
-    volumes:
-      - ./data/cache:/app/data/cache    # keep paid lookups between runs
-      - ./data/usage:/app/data/usage    # one budget ledger, inside and outside Docker
     depends_on:
       db:
         condition: service_healthy

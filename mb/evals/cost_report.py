@@ -36,10 +36,31 @@ def _rate() -> float:
     return float(_app()["inr_per_usd"])
 
 
+def _ledger_rows(ledger: Path) -> list[dict]:
+    """Every paid call: from Postgres (usage_ledger) when DATABASE_URL is set, else the local file."""
+    from mb import db
+    rows = []
+    if db.enabled():
+        rows += [{"run_id": r[0], "kind": r[1], "item": r[2], "cost_usd": float(r[3]), "units": r[4] or {}}
+                 for r in db.conn().execute("SELECT run_id, kind, item, cost_usd, units FROM usage_ledger").fetchall()]
+    if ledger.exists():
+        rows += [json.loads(l) for l in ledger.read_text(encoding="utf-8").splitlines() if l.strip()]
+    return rows
+
+
+def calls_per_brief(rows: list[dict], n_ctx: int) -> dict[str, float]:
+    """Paid data calls per brief when building the test days' facts from nothing."""
+    calls = defaultdict(float)
+    for r in rows:
+        if r["kind"] == "api" and r["run_id"].startswith("ctx-"):
+            calls[r["item"]] += r["units"].get("calls", 1)
+    return {k: v / n_ctx for k, v in calls.items()}
+
+
 def measure(run: str = "cmp-baseline-gpt4o", ledger: Path = LEDGER, runs: Path = RUNS) -> dict:
     recs = [json.loads(l) for l in (runs / run / "records.jsonl").read_text(encoding="utf-8").splitlines()]
     lat = sorted(r["latency_ms"] / 1000 for r in recs)
-    rows = [json.loads(l) for l in ledger.read_text(encoding="utf-8").splitlines() if l.strip()]
+    rows = _ledger_rows(ledger)
     data = defaultdict(float)
     batch_briefs = set()
     for r in rows:
@@ -57,46 +78,61 @@ def measure(run: str = "cmp-baseline-gpt4o", ledger: Path = LEDGER, runs: Path =
             "p50_s": lat[len(lat) // 2], "p95_s": lat[max(0, int(round(len(lat) * 0.95)) - 1)], "max_s": lat[-1],
             "data_cold_usd": data["cold"] / n_ctx if data["cold"] else None,
             "data_batch_usd": data["batch"] / len(batch_briefs) if batch_briefs and data["batch"] else None,
-            "batch_briefs": len(batch_briefs)}
+            "batch_briefs": len(batch_briefs), "calls": calls_per_brief(rows, n_ctx)}
 
 
-def report(run: str = "cmp-baseline-gpt4o") -> str:
+# A planned stop is now found with the free IDs-only search plus one Place Details call, and
+# "ideas near here" with one Text Search; the measured Text Search count splits about 60 / 40.
+STOP_SHARE = 0.6
+WARM_SHARE = 0.2        # with the places table and shared cache, about 1 in 5 lookups is new or due a refresh
+
+
+def data_usd(calls: dict[str, float], prices: dict, share: float = 1.0) -> float:
+    ts = calls.get("google_places_text_search", 0)
+    usd = (ts * STOP_SHARE * prices["google_places_details"] + ts * (1 - STOP_SHARE) * prices["google_places_text_search"]
+           + calls.get("google_routes_matrix_element", 0) * prices["google_routes_matrix_element"]
+           + calls.get("tavily_search", 0) * prices["tavily_search"])
+    return usd * share
+
+
+def monthly(per_day: int, model_usd: float, calls: dict[str, float], prices: dict, free: dict, use_free: bool) -> float:
+    """USD a month: models, plus data with the places table warm, minus Google's free calls if use_free."""
+    n = per_day * 30
+    ts = calls.get("google_places_text_search", 0) * WARM_SHARE * n
+    use = {"google_places_details": ts * STOP_SHARE, "google_places_text_search": ts * (1 - STOP_SHARE),
+           "google_routes_matrix_element": calls.get("google_routes_matrix_element", 0) * WARM_SHARE * n}
+    google = sum(max(0, q - (free.get(k, 0) if use_free else 0)) * prices[k] for k, q in use.items())
+    tavily = calls.get("tavily_search", 0) * WARM_SHARE * n * prices["tavily_search"]
+    return n * model_usd + google + tavily
+
+
+def report(run: str = "baseline-v9") -> str:
     m, inr = measure(run), _rate()
     prices = yaml.safe_load((CONFIG_DIR / "prices.yaml").read_text(encoding="utf-8"))
-    free_text_search = 1000 * prices["google_places_text_search"] * inr
-    free_routes = 10000 * prices["google_routes_matrix_element"] * inr
-    data = m["data_cold_usd"] or 0.0
+    free = {k: v for k, v in yaml.safe_load((CONFIG_DIR / "free_allowance.yaml").read_text(encoding="utf-8")).items()
+            if isinstance(v, int)}
+    c = m["calls"]
     def rs(usd): return f"₹{usd * inr:,.2f}"
-    def month(per_day, usd): return f"₹{per_day * 30 * usd * inr:,.0f}"
+    def rm(usd): return f"₹{usd * inr:,.0f}"
     lines = [
         "# Morning Brief: cost and time per brief", "",
-        f"Measured on the 22-day test set (run `{m['run']}`: GPT-4o for the three writing agents, gpt-4o-mini judge,",
-        f"including fix attempts). 1 USD = ₹{inr:g}{f" (checked {_app().get('inr_per_usd_checked')})" if _app().get("inr_per_usd_checked") else ""}. Per-call data prices from config/prices.yaml.", "",
-        "## Per brief", "",
-        "| | per brief |", "|---|---|",
-        f"| Models (4 agents, incl. judge and fixes) | **{rs(m['model_usd'])}** |",
-        f"| Data, cold (Places, Routes, web search, nothing cached) | {rs(data)} |",
-        *( [f"| Data, as measured in the batch run ({m['batch_briefs']} briefs, partly cached) | {rs(m['data_batch_usd'])} |"]
-           if m["data_batch_usd"] else []),
-        f"| **Total, cold** | **{rs(m['model_usd'] + data)}** |", "",
-        "## Time per brief (models only; the batch prepares briefs ahead of the send time)", "",
+        f"Models measured on the 22-day test set (run `{m['run']}`, including the judge and fixes). Data priced at",
+        "Google's India pricing (config/prices.yaml) with the places table; free monthly calls from",
+        f"config/free_allowance.yaml. 1 USD = ₹{inr:g}" + (f" (checked {_app().get('inr_per_usd_checked')})." if _app().get("inr_per_usd_checked") else "."), "",
+        "## Per brief", "", "| | per brief |", "|---|---|",
+        f"| Models | **{rs(m['model_usd'])}** |",
+        f"| Data, first traveller to these places | {rs(data_usd(c, prices))} |",
+        f"| Data, places table warm | {rs(data_usd(c, prices, WARM_SHARE))} |", "",
+        "## Time per brief (the batch prepares briefs ahead of the send time)", "",
         f"median {m['p50_s']:.1f} s · 95th percentile {m['p95_s']:.1f} s · slowest {m['max_s']:.1f} s · limit 90 s", "",
         "## Per month (30 days)", "",
-        "| Travellers a day | Models only | Models + data, no cache | data 50% cached | data 80% cached |",
-        "|---|---|---|---|---|",
+        "| Travellers a day | With the free allowance | Worst case: allowance already used by other apps |", "|---|---|---|",
     ]
     for n in (50, 100):
-        lines.append(f"| {n} | {month(n, m['model_usd'])} | {month(n, m['model_usd'] + data)} | "
-                     f"{month(n, m['model_usd'] + data * .5)} | {month(n, m['model_usd'] + data * .2)} |")
-    lines += ["", "## Notes", "",
-              "- Google Places is most of the cost. Travellers on the same itinerary share hotels and sights, so a cache",
-              "  shared across travellers (opening hours kept for a few days) should remove most repeat lookups; the cache",
-              "  levels above are estimates until measured with real traffic.",
-              "- Prices checked against Google's pricing page on 29 Oct 2026 (Text Search Enterprise $35 per 1,000).",
-              f"  Google's free monthly allowances are not deducted above: 1,000 Text Search Enterprise calls (about ₹{free_text_search:,.0f})",
-              f"  and 10,000 Route Matrix elements (about ₹{free_routes:,.0f}) a month.",
-              "- Claude Sonnet in all three writing roles scored the same as GPT-4o but cost about 3.7x as much in models.",
-              "- GPT-4.1 mini as Surprise finder scored within noise of GPT-4o at a lower cost (to confirm with the chosen judge)."]
+        lines.append(f"| {n} | {rm(monthly(n, m['model_usd'], c, prices, free, True))} | "
+                     f"{rm(monthly(n, m['model_usd'], c, prices, free, False))} |")
+    lines += ["", "Google's free allowance is per billing account, so if another app on the same account already uses",
+              "it, the worst-case column applies. Full sheet: docs/cost_sheet.md."]
     return "\n".join(lines) + "\n"
 
 

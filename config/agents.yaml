@@ -4,7 +4,7 @@
   inputs: [ctx.trip_day, src.weather, src.places]
   output: out.summary
   model: openai/gpt-4o
-  prompt_version: summariser-v7
+  prompt_version: summariser-v8
 
 - id: mb.surprise_finder.v1
   use_case: morning_brief
@@ -20,7 +20,7 @@
   inputs: [ctx.trip_day, out.summary, out.surprises]
   output: out.draft
   model: openai/gpt-4o
-  prompt_version: composer-v4
+  prompt_version: composer-v5
 
 - id: mb.judge.v1
   use_case: morning_brief

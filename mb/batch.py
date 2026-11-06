@@ -39,10 +39,14 @@ class Due:
 async def due_briefs(s: Services, at: dt.datetime, window_min: int) -> list[Due]:
     """Every trip day whose local send time falls in [at, at + window)."""
     end = at + dt.timedelta(minutes=window_min)
+    # Local dates can differ from UTC by up to 14 hours either way, so ask for one day either side.
+    first, last = at.date() - dt.timedelta(days=1), end.date() + dt.timedelta(days=1)
     out = []
-    for trip_id in s.loader.trip_ids():
+    for trip_id in s.loader.trips_with_day_between(first, last):
         trip = s.loader.load(trip_id)
         for day in trip.days:
+            if not first <= day.date <= last:
+                continue
             tz, _, _ = await wake_timezone(trip, day, s.meteo)
             if not tz:
                 continue
@@ -60,7 +64,7 @@ def _scenarios() -> dict[tuple[str, dt.date], str]:
 
 
 async def run_batch(s: Services, at: dt.datetime, window_min: int, store: BriefStore,
-                    plan_only: bool = False, force: bool = False, use_scenarios: bool = True,
+                    plan_only: bool = False, force: bool = False, use_scenarios: bool = False,
                     concurrency: int = 3) -> list[dict]:
     if not briefs_allowed(s.cfg) and not plan_only:
         print("Briefs are switched off (kill switch): nothing prepared.")
@@ -89,7 +93,7 @@ async def run_batch(s: Services, at: dt.datetime, window_min: int, store: BriefS
             b = run.brief
             store.save(OutboxItem(d.trip_id, d.date.isoformat(), d.timezone, f"{d.send_local:%H:%M}",
                                   d.send_utc.isoformat(), b.meta.judge_verdict, b.confidence.score,
-                                  b.confidence.badge, b.model_dump(mode="json")))
+                                  b.confidence.badge, b.model_dump(mode="json"), brief_id=b.brief_id))
             return row | {"status": f"ready ({b.meta.judge_verdict}, {b.confidence.score} {b.confidence.badge})"}
 
     results = await asyncio.gather(*(one(d) for d in due))
@@ -113,10 +117,12 @@ def main():
     p.add_argument("--plan", action="store_true", help="only list who is due; no cost")
     p.add_argument("--force", action="store_true", help="regenerate briefs already in the outbox")
     p.add_argument("--concurrency", type=int, default=3, help="briefs written at the same time (default 3)")
+    p.add_argument("--scenarios", action="store_true",
+                   help="use stored test weather for test-set days (demos and tests only; off in production)")
     a = p.parse_args()
     s = Services()
     asyncio.run(run_batch(s, _parse_at(a.at), a.window, get_store(), plan_only=a.plan, force=a.force,
-                          concurrency=a.concurrency))
+                          concurrency=a.concurrency, use_scenarios=a.scenarios))
 
 
 if __name__ == "__main__":

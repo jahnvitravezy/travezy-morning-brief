@@ -103,3 +103,18 @@ def test_two_reviewers_agreement():
     assert r["briefs"] == 3 and r["agreement"] == "67%"
     assert r["unsafe_only_a"] == ["B02"] and r["unsafe_only_b"] == ["B03"]
     assert r["decision_splits"] == ["B03: send vs fix_first"]
+
+
+def test_reviewer_scores_are_found_on_any_sheet(tmp_path):
+    from openpyxl import Workbook
+    wb = Workbook()
+    wb.active.title = "How to score"
+    wb.active.append(["Morning Brief scoring sheet"])
+    ws = wb.create_sheet("Scores")
+    ws.append(["code", "accuracy", "decision", "wrong_or_unsafe"])
+    ws.append(["B01", 5, "send", "no"])
+    ws.append(["B18", 2, "dont_send", "yes"])
+    wb.save(tmp_path / "t.xlsx")
+    got = ag.read_reviewer(tmp_path / "t.xlsx")
+    assert got["B01"] == {"decision": "send", "unsafe": False}
+    assert got["B18"]["unsafe"] is True and got["B18"]["decision"] != "send"

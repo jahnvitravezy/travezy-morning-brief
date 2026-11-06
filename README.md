@@ -48,7 +48,7 @@ curl -s http://localhost:8000/health
 - **Evaluation**: a fixed set of 22 trip days, one change at a time, a scorecard, checks on the
   judge itself, cost reports, and a blind review pack for Travezy's team.
 - **The service**: FastAPI with Postgres, a batch runner that prepares briefs before each
-  traveller's local morning, a phone-style preview, a kill switch and a budget cap.
+  traveller's local morning, a phone-style preview, a kill switch and a monthly budget with alerts and a hard stop.
 
 ## Folders
 

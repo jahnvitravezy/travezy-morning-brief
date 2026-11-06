@@ -62,7 +62,7 @@ def test_outbox_lists_prepared_briefs(client, tmp_path):
                                         "pass", 90, "green", {"notification": {"title": "Day 2 in Dubai"}}))
     r = client.get("/outbox/2026-11-21").json()
     assert r == [{"trip_id": "dubai_up01", "date": "2026-11-21", "timezone": "Asia/Dubai", "send_at_local": "07:30",
-                  "send_at_utc": "2026-11-21T03:30:00+00:00", "verdict": "pass", "score": 90, "badge": "green",
+                  "send_at_utc": "2026-11-21T03:30:00+00:00", "verdict": "pass", "score": 90, "badge": "green", "brief_id": "", "sent_at": None,
                   "title": "Day 2 in Dubai"}]
 
 
@@ -102,3 +102,34 @@ def test_badge_covers_only_the_ai_written_parts():
     from mb.sources.itinerary import FileLoader
     html = render(safe_version(build_context(FileLoader().load("dubai_up01"), 1), "test"))
     assert html.index("From your itinerary") < html.index("Suggestions for today") < html.index("badge style")
+
+
+def test_backend_fetches_by_send_time_reads_the_brief_and_marks_it_sent(client, tmp_path):
+    from mb.sources.itinerary import FileLoader
+    from mb.store import FileStore, OutboxItem
+    b = safe_version(build_context(FileLoader().load("dubai_up01"), 1), "t")
+    api.app.state.store = FileStore(tmp_path)
+    api.app.state.store.save(OutboxItem("dubai_up01", "2026-11-21", "Asia/Dubai", "07:30", "2026-11-21T03:30:00+00:00",
+                                        "pass", 90, "green", b.model_dump(mode="json"), brief_id=b.brief_id))
+    due = client.get("/outbox", params={"due_from": "2026-11-20T18:00:00Z", "due_to": "2026-11-21T06:00:00Z"}).json()
+    assert [d["brief_id"] for d in due] == [b.brief_id]
+    got = client.get(f"/briefs/{b.brief_id}").json()
+    assert got["brief"]["trip_id"] == "dubai_up01" and got["sent_at"] is None
+    assert client.post(f"/briefs/{b.brief_id}/sent").status_code == 200
+    assert client.post(f"/briefs/{b.brief_id}/sent").status_code == 200            # safe twice
+    assert client.get("/outbox", params={"due_from": "2026-11-20T18:00:00Z", "due_to": "2026-11-21T06:00:00Z"}).json() == []
+    assert client.get("/briefs/nope").status_code == 404
+
+
+def test_health_says_only_ok_and_spend_needs_the_key(client):
+    with TestClient(api.app) as bare:
+        assert bare.get("/health").json() == {"ok": True}
+        assert bare.get("/status").status_code == 401
+    assert "budget" in client.get("/status").json()
+
+
+def test_key_in_the_url_is_refused_in_production(client, monkeypatch):
+    monkeypatch.setenv("MB_ENV", "production")
+    with TestClient(api.app) as bare:
+        assert bare.get("/trips", params={"key": "test-key"}).status_code == 401
+        assert bare.get("/trips", headers={"X-API-Key": "test-key"}).status_code == 200

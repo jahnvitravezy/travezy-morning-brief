@@ -226,8 +226,59 @@ def test_diet_clash_offers_a_checked_alternative():
     alt = Candidate(id="places:v", provider="google_places", name="Rangoli Veg Kitchen",
                     window=Window(start=dt.time(14), end=dt.time(16)), types=["vegetarian_restaurant"], travel_min=8)
     lines = diet_checks(c.model_copy(update={"candidates": [alt]}))
-    if lines:                                   # only when a planned meal isn't marked vegetarian
-        assert "or try Rangoli Veg Kitchen (14:00-16:00, 8 min away)" in lines[0]
+    assert lines, "this day has a planned meal not marked vegetarian"
+    assert "or try Rangoli Veg Kitchen (14:00-16:00, 8 min away)" in lines[0]
+
+
+def _with_prefs(c, **update):
+    p = c.preferences
+    parts = {k: v for k, v in update.items() if k in ("diet", "pace", "party")}
+    return c.model_copy(update={"preferences": p.model_copy(update=parts | {k: v for k, v in update.items() if k == "who"})})
+
+
+def test_jain_travellers_get_a_vegetarian_alternative_with_a_jain_note():
+    from mb.contracts import Candidate, Diet, Window
+    c = ctx_for("dubai_up02", 1)
+    c = _with_prefs(c, diet=Diet(summary="Jain", restrictions=["jain", "vegetarian"]))
+    veg = Candidate(id="places:v", provider="google_places", name="Rangoli Veg Kitchen",
+                    window=Window(start=dt.time(14), end=dt.time(16)), types=["vegetarian_restaurant"])
+    line = diet_checks(c.model_copy(update={"candidates": [veg]}))[0]
+    assert "or try Rangoli Veg Kitchen" in line and "ask for Jain preparation" in line
+
+
+def test_walking_limit_gets_a_caution():
+    from mb.agents.facts import walk_checks
+    c = ctx_for("dubai_up01", 1)
+    c = _with_prefs(c, pace=c.preferences.pace.model_copy(update={"max_walk_km": 2}))
+    walky = [a for a in c.day.activities if any(w in f"{a.name} {a.note}".lower() for w in ("walk", "souk", "old town", "heritage", "mall"))]
+    lines = walk_checks(c)
+    assert len(lines) == len(walky) and all("2 km limit" in l for l in lines)
+
+
+def test_monkeys_caution_for_children_and_dune_bashing_for_older_travellers():
+    from mb.agents.facts import safety_checks
+    from mb.contracts import Activity, Party
+    c = ctx_for("bali_up02", 1)
+    monkey = Activity(id="m", kind="do", start=dt.time(16), name="Sacred Monkey Forest Sanctuary")
+    kids = _with_prefs(c, party=Party(adults=2, children_ages=[6, 10]))
+    kids = kids.model_copy(update={"day": kids.day.model_copy(update={"activities": [monkey]})})
+    assert "keep the children (6 and 10) close" in safety_checks(kids)[0]
+    dunes = Activity(id="d", kind="do", start=dt.time(15), name="Desert safari", note="Dune bashing and camp dinner")
+    older = _with_prefs(c, who="Couple in their 60s", party=Party(adults=2))
+    older = older.model_copy(update={"day": older.day.model_copy(update={"activities": [dunes]})})
+    assert "dune bashing is a rough" in safety_checks(older)[0]
+    young = _with_prefs(c, who="Couple in their 20s", party=Party(adults=2))
+    young = young.model_copy(update={"day": young.day.model_copy(update={"activities": [dunes]})})
+    assert safety_checks(young) == []
+
+
+def test_weather_clash_with_no_dry_slot_offers_an_indoor_idea():
+    from mb.contracts import Candidate, Window
+    c = ctx_for("bali_up04", 1, rain=range(6, 23))
+    museum = Candidate(id="places:m", provider="google_places", name="ARMA Museum",
+                       window=Window(start=dt.time(13), end=dt.time(16)), types=["museum"])
+    swap = suggested_swap(c.model_copy(update={"candidates": [museum]}))
+    assert swap and "ARMA Museum" in swap
 
 
 def test_judge_cannot_call_a_verified_place_invented():
