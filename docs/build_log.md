@@ -380,3 +380,24 @@ Checked in v12 against their notes:
 - B02: still "ask for Jain options". There's no vegetarian place among that day's checked ideas, and code never invents one.
 
 B19 had the monkey caution twice (the model's and code's); fixed after v12.
+
+### Testing before the reply (6 Nov)
+
+- **Brief audit (new, `python -m mb.evals.audit`):** every brief is checked against its facts:
+  - Limits, and a title that isn't generic.
+  - Every idea is a checked candidate inside its slot, with no clash with a planned stop, a rest break, a meal, the weather or the walking limit.
+  - No unknown times or unsupported claims in the tip, every must-say fact covered, no duplicates, a swap when one exists.
+- **What the audit found on v13, and the fixes:**
+  - The tip check read "31°C" as a place called "C", so a model's valid heat tip could be dropped.
+  - A model's vague dinner line sat next to code's.
+- **v14 audit result:** 22 of 22 briefs clean.
+- **Full suite against a real Postgres:** found `PostgresStore(url)` ignoring its address (it always used `DATABASE_URL`); fixed.
+- **New tests:** six processes migrating at once, and migration 002 upgrading a database that already holds briefs.
+- **Suite result:** 234 passed, three runs in a row, nothing skipped.
+- **End-to-end (`scripts/smoke_check.py`) against the running Docker service:** 20 of 20, covering:
+  - Health and status.
+  - Key refused when missing or wrong.
+  - Outbox by send time, fetch by brief_id, mark sent (safe twice), a sent brief leaves the due list.
+  - Preview by header only.
+  - POST /brief, and a date not on the trip refused.
+- **baseline-v14 (the pack sent):** 22/22, 0 fallbacks, 0 agent failures, every rule passed, 13 green and 9 amber, first score 82.9 (v12 85.2, v13 84.4: within the judge's noise), $0.0131 per brief. Same codes as the pack Travezy reviewed.

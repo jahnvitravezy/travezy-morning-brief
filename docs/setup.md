@@ -120,6 +120,13 @@ python -m pytest -q
 
 The Postgres tests run only when `TEST_DATABASE_URL` points at a throwaway database.
 
+Two more checks, beyond the unit tests:
+
+```powershell
+python -m mb.evals.audit baseline-v14      # every brief in a run, checked against the facts it was written from
+python scripts/smoke_check.py              # the running service, endpoint by endpoint (start Docker and run the batch first)
+```
+
 ## 7. Running the evaluation
 
 Every paid call goes through the budget guard (the cap is in `config/app.yaml`) and is logged in

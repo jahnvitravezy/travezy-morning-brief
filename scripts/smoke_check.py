@@ -2,7 +2,7 @@
 
     docker compose up -d --build
     docker compose run --rm api python -m mb.batch --at 2026-11-21T02:00:00Z --window 120 --scenarios
-    python scripts/smoke_test.py
+    python scripts/smoke_check.py
 
 Reads MB_API_KEY from .env (never prints it). Prints PASS or FAIL for each step; exit code 1 on any FAIL.
 """
