@@ -315,3 +315,14 @@ def test_monkey_caution_is_added_even_when_another_line_names_the_forest():
     c = c.model_copy(update={"day": c.day.model_copy(update={"activities": [monkey]})})
     out = ensure_covered(["Leave Sacred Monkey Forest Sanctuary by 17:00: it closes before your planned finish."], c)
     assert any("keep the children (6 and 10) close" in h for h in out)
+
+
+
+def test_models_own_monkey_caution_is_not_doubled():
+    from mb.agents.facts import ensure_covered
+    from mb.contracts import Activity
+    c = ctx_for("bali_up01", 1)
+    monkey = Activity(id="m", kind="do", start=dt.time(16), end=dt.time(17, 30), name="Sacred Monkey Forest Sanctuary")
+    c = c.model_copy(update={"day": c.day.model_copy(update={"activities": [monkey]})})
+    out = ensure_covered(["Monkeys grab bags and food; keep everyone close, hold bags tightly."], c)
+    assert sum("monkey" in h.lower() for h in out) == 1

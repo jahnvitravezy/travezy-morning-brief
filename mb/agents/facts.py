@@ -283,7 +283,7 @@ def walk_checks(ctx: Context) -> list[str]:
     return out
 
 
-def safety_items(ctx: Context) -> list[tuple[str, str, list[str]]]:
+def safety_items(ctx: Context) -> list[tuple[str, str, list[str], str]]:
     """(stop, caution, topic words) from config/safety.yaml, only for the travellers each applies to.
     A rule with "all" applies to everyone; otherwise it needs children or an older traveller."""
     kids = ctx.preferences.party.children_ages
@@ -294,12 +294,13 @@ def safety_items(ctx: Context) -> list[tuple[str, str, list[str]]]:
         text = f"{a.name} {a.note}".lower()
         r = next((r for r in _safety_rules() if any(m in text for m in r["match"]) and who & set(r["who"])), None)
         if r:
-            out.append((a.name, r["line"].format(place=a.name, children=children), r["topic"]))
+            word = next(m for m in r["match"] if m in text)
+            out.append((a.name, r["line"].format(place=a.name, children=children), r["topic"], word))
     return out
 
 
 def safety_checks(ctx: Context) -> list[str]:
-    return [line for _, line, _ in safety_items(ctx)]
+    return [line for _, line, _, _ in safety_items(ctx)]
 
 
 def airport_checks(ctx: Context) -> list[str]:
@@ -373,7 +374,9 @@ def must_cover(ctx: Context) -> list[tuple[list[str], list[str], str]]:
     for line in walk_checks(ctx):
         name = next(n for n in acts if line.startswith(n))
         out.append((name_words(name), ["walk", "taxi", "break"], line))
-    out += [(name_words(name), topic, line) for name, line, topic in safety_items(ctx)]
+    # A caution is covered by any line with the matched word ("monkey") and the topic ("bags"), so a
+    # model's own "Monkeys grab bags" line isn't doubled by code's (v12, B19).
+    out += [([word], topic, line) for _, line, topic, word in safety_items(ctx)]
     out += [(["airport"], ["leave", "by"], line) for line in airport_checks(ctx)]
     out += [(["rain"], ["indoor", "inside", "spa", "shopping", "umbrella"], line) for line in free_day_weather(ctx)]
     for a in ctx.day.activities:

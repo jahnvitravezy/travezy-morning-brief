@@ -317,3 +317,66 @@ All the points from Sourabh's 3 Nov email. The reply goes through them one by on
 - **Watch point:** 2 to 3 fallbacks in each gpt-5-mini run, against 0 for GPT-4o on the same days. Read those briefs before switching.
 - baseline-v9 (all the fixes, GPT-4o): 22/22, 0 fallbacks, every rule passed, first score 82.4 (v8: 84.5, within noise), 11 green and 11 amber. Review pack in `data/runs/baseline-v9/review`.
 - Tests: 201 passed (plus the Postgres tests, run against a test database).
+
+## 6 Nov: Travezy's blind review of the rerun, and what came out of it
+
+**Their verdicts on the v9 pack:** send 10 (up from 4 last time), fix first 9, don't send 1 (B18).
+
+**Why the v9 pack missed fixes (their point 2):** reruns reuse each test day's stored facts
+(`data/contexts`, built 25 Oct), so every model sees identical inputs. But the idea filters (airport taxi,
+meal and rest) run while those facts are built, so they never ran on v9. The pack is now regenerated with
+`--rebuild` from current code (baseline-v12, commit `4a240bd` plus the fix below).
+
+**Built:**
+- **Backend:**
+  - `GET /briefs/{brief_id}` returns a stored brief.
+  - `POST /briefs/{brief_id}/sent` marks it sent.
+  - `GET /outbox?due_from=&due_to=` queries by UTC send time.
+  - `brief_id` and `sent_at` columns (migration 002).
+- **Batch:** the loader is asked only for trips with a day in the window. Stored test weather is off unless `--scenarios`.
+- **Production settings:** with `MB_ENV=production` the key is header-only. `/health` returns only `ok`; spend moved to `/status`.
+- **Quality:**
+  - Walking limit: cautions on long-walk stops, and only seated ideas at 3 km or less, with a "cafes and museums" search so the day isn't empty.
+  - Safety cautions in `config/safety.yaml`: monkeys for everyone (children named), dune bashing and hikes for older travellers and children.
+  - Jain travellers get a vegetarian place with "ask for Jain preparation"; a model's bare "ask for options" line is replaced when code has an alternative.
+  - Weather clashes with no dry slot get an indoor swap.
+  - The rest break is kept free with no planned lunch.
+- **Judge:** a "doesn't mention X" flag is a fix, not serious (code enforces must-say facts), and the timeline is treated as code-written.
+- **Evaluation:** the agreement script finds the scores on any sheet; their file opened on "How to score", so it had read 0 briefs.
+- **Docs and cost:**
+  - The cost report uses the Postgres ledger, India prices, the free allowance and a worst-case column.
+  - Loader spec matched to their format, with each field marked "exists today" or "new".
+  - Prompts summariser-v8 and composer-v5: the title is set by code.
+  - Docker mounts removed, design-note list updated, connection pool added to the scaling plan.
+
+**Judges against Travezy's 20 verdicts (v9 pack):**
+
+| Judge | Agreement | Weighted kappa | Unsafe caught |
+|---|---|---|---|
+| gpt-4o-mini (current) | 45% | 0.00 | 0 of 3 |
+| gpt-5-mini (replacement) | 55% | 0.09 | 0 of 3 |
+
+Recommendation: gpt-5-mini. Neither catches unsafe briefs, which is why safety stays in code.
+
+**gpt-5-mini fallbacks explained:** of 8 fallbacks across its three runs, 6 were the gpt-4o-mini judge
+flagging "doesn't mention X" for facts code already guarantees, or quoting the code-written timeline. 2 were
+real: an unsupported "swimming not advised" claim, and a missed timed entry. The judge rule above removes the 6.
+
+**Runs (GPT-4o, judge gpt-4o-mini, facts rebuilt):**
+
+| Run | Fallbacks | First score | Green / amber | Days with no idea | Per brief |
+|---|---|---|---|---|---|
+| v10 | 1 | 84.5 | 13 / 8 | 8 | $0.0134 |
+| v11 | 0 | 83.9 | 14 / 8 | 12 | $0.0130 |
+| v12 | 0 | 85.2 | 13 / 9 | 9 | $0.0133 |
+
+Checked in v12 against their notes:
+- B18: no aquarium before the taxi.
+- B19: no second lunch.
+- B07: walking and dune-bashing cautions.
+- B14: monkey caution naming the children, plus an indoor swap.
+- B04 and B05: a checked vegetarian alternative.
+- B12: an indoor swap.
+- B02: still "ask for Jain options". There's no vegetarian place among that day's checked ideas, and code never invents one.
+
+B19 had the monkey caution twice (the model's and code's); fixed after v12.
