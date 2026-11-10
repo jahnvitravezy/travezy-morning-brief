@@ -129,7 +129,12 @@ def pace_checks(ctx: Context) -> list[str]:
         last = max(ground, key=lambda a: a.end)
         if last.end > limit:
             usual = f", later than your usual {limit:%H:%M} return" if pace.back_by else ""
-            out.append(f"Long day: you finish around {last.end:%H:%M} at {last.name}{usual}")
+            where = (f"with your {last.name[0].lower() + last.name[1:]}" if last.kind == "move" else f"at {last.name}")
+            # Say what to do about it (scoring sheet, 10 Nov: B02, B14 named the problem only)
+            fix = (f"; ask the driver to finish by {limit:%H:%M}" if pace.back_by and last.kind == "move"
+                   else f"; leave {last.name} earlier to be back by {limit:%H:%M}" if pace.back_by
+                   else "; plan a rest in the afternoon")
+            out.append(f"Long day: you finish around {last.end:%H:%M} {where}{usual}{fix}")
     return out
 
 
@@ -182,22 +187,42 @@ def swap_slots(ctx: Context, a) -> list[str]:
     return out
 
 
-def suggested_swap(ctx: Context) -> str | None:
-    """Move the first clashing outdoor item to the first valid slot, or None. Never onto another plan."""
+def _overlaps(s1: dt.time, e1: dt.time, s2: dt.time, e2: dt.time) -> bool:
+    return _mins(s1) < _mins(e2) and _mins(s2) < _mins(e1)
+
+
+def in_plan(name: str, ctx: Context) -> bool:
+    """A place already in the trip ("Zest" when the day has "Zest Ubud": scoring sheet, 10 Nov, B14)."""
+    n = name.lower()
+    planned = {a.name.lower() for a in ctx.day.activities} | {x.lower() for x in ctx.other_days}
+    return any(n == p or (min(len(n), len(p)) >= 4 and (n in p or p in n)) for p in planned)
+
+
+def swap_choice(ctx: Context):
+    """(swap line, indoor candidate or None). Moves the first clashing outdoor item to the first valid
+    slot; with none, offers a checked indoor place open during the clash. Never onto another plan."""
     for a in ctx.day.activities:
-        if is_outdoor(a) and any(c.startswith(f"{a.name} ") for c in weather_clashes(ctx)) and not a.booked:
+        clash = next((c for c in weather_clashes(ctx) if c.startswith(f"{a.name} ")), None)
+        if is_outdoor(a) and clash and not a.booked:
             slots = swap_slots(ctx, a)
             if slots:
-                return f"Move {a.name} to {slots[0]}"
-            # No dry, open slot today: offer a checked indoor idea instead (blind review, 6 Nov:
-            # no rain or heat clash in the pack got a swap).
-            indoor = next((c for c in ctx.candidates
-                           if any(w in f"{c.name} {' '.join(c.types)}".lower().replace("_", " ") for w in INDOOR_WORDS)), None)
+                return f"Move {a.name} to {slots[0]}", None
+            # No dry, open slot today: a checked indoor place instead (blind review, 6 Nov). It must be
+            # open while the clash lasts and not already planned (scoring sheet, 10 Nov: B12, B14).
+            end = a.end or a.start
+            indoor = next((c for c in ctx.candidates if not in_plan(c.name, ctx)
+                           and _overlaps(c.window.start, c.window.end, a.start, end)
+                           and any(w in f"{c.name} {' '.join(c.types)}".lower().replace("_", " ") for w in INDOOR_WORDS)), None)
             if indoor:
-                return (f"If the weather turns, swap {a.name} for {indoor.name} "
-                        f"(indoor, {indoor.window.start:%H:%M}-{indoor.window.end:%H:%M})")
-            return None
-    return None
+                why = clash.split(": ", 1)[1]                       # "up to 38°C" / "rain up to 85%"
+                return (f"{why[0].upper() + why[1:]} at {a.name}: swap it for {indoor.name} "
+                        f"(indoor, {indoor.window.start:%H:%M}-{indoor.window.end:%H:%M})"), indoor
+            return None, None
+    return None, None
+
+
+def suggested_swap(ctx: Context) -> str | None:
+    return swap_choice(ctx)[0]
 
 
 # ---------- Checks that must reach the traveller ----------
@@ -205,6 +230,8 @@ def _diet_alternative(ctx: Context, words: tuple[str, ...]) -> str:
     """A checked place that suits the diet, from today's candidates (blind review, 3 Nov:
     "ask the restaurant" alone isn't enough). Empty when no candidate fits."""
     for c in ctx.candidates:
+        if in_plan(c.name, ctx):
+            continue
         text = f" {c.name} {' '.join(c.types)} {c.snippet} ".lower().replace("_", " ")
         if any(w in text for w in words):
             near = f", {c.travel_min} min away" if c.travel_min else ""
@@ -212,11 +239,49 @@ def _diet_alternative(ctx: Context, words: tuple[str, ...]) -> str:
     return ""
 
 
+MEAL_WORDS = ("dinner", "lunch", "breakfast", "bbq", "barbecue", "buffet")
+
+
+def _meals(ctx: Context) -> list:
+    """Planned meals, including one inside an activity (a desert safari's camp dinner: scoring sheet, B07, B10)."""
+    return [a for a in ctx.day.activities if a.kind == "eat"
+            or (a.kind == "do" and any(w in f"{a.name} {a.note}".lower() for w in MEAL_WORDS))]
+
+
+FOOD_WORDS = ("restaurant", "cafe", "café", "food", "bakery", "kitchen", "eatery", "dining", "bistro")
+
+
+def _is_food(c) -> bool:
+    return any(w in f"{c.name} {' '.join(c.types)}".lower().replace("_", " ") for w in FOOD_WORDS)
+
+
+def code_places(ctx: Context) -> list:
+    """Places code already suggests (the indoor swap, a diet alternative)."""
+    names = {l.split(", or try ", 1)[1].split(" (")[0] for l in diet_checks(ctx) if ", or try " in l}
+    swap = swap_choice(ctx)[1]
+    return [c for c in ctx.candidates if c.name in names] + ([swap] if swap else [])
+
+
+def repeats_code_place(name: str, slot: str, ctx: Context) -> bool:
+    """An idea that repeats a place code already suggests, or a second meal in the same window
+    (scoring sheet, 10 Nov: B04-B06 got two lunch places, B12 and B14 the swap again as an idea)."""
+    taken = code_places(ctx)
+    if any(name.lower() == c.name.lower() for c in taken):
+        return True
+    cand = next((c for c in ctx.candidates if c.name.lower() == name.lower()), None)
+    try:
+        s, e = (dt.datetime.strptime(x.strip(), "%H:%M").time() for x in slot.split("-")[:2])
+    except (ValueError, AttributeError):
+        return False
+    return bool(cand) and _is_food(cand) and any(_is_food(c) and _overlaps(s, e, c.window.start, c.window.end)
+                                                  for c in taken)
+
+
 def diet_checks(ctx: Context) -> list[str]:
     """Jain food rules are stricter than "vegetarian" or "plant-based": every meal needs asking."""
     r = set(ctx.preferences.diet.restrictions)
     if r & {"jain", "no_onion", "no_garlic", "no_root_vegetables"}:
-        meals = [a.name for a in ctx.day.activities if a.kind == "eat" and "jain" not in a.note.lower()]
+        meals = [a.name for a in _meals(ctx) if "jain" not in a.note.lower()]
         if not meals:
             return []
         alt = _diet_alternative(ctx, ("jain",)) or _diet_alternative(ctx, ("vegetarian", "vegan", "pure veg"))
@@ -226,8 +291,8 @@ def diet_checks(ctx: Context) -> list[str]:
     if r & {"vegetarian", "vegan"}:
         # Every planned meal not already marked vegetarian gets a check (stand-in review: B04, B06, B11)
         word = "vegan" if "vegan" in r else "vegetarian"
-        meals = [a.name for a in ctx.day.activities if a.kind == "eat"
-                 and not any(w in f"{a.name} {a.note}".lower() for w in ("veg", "plant"))]
+        meals = [a.name for a in _meals(ctx)
+                 if not any(w in f"{a.name} {a.note}".lower() for w in ("veg", "plant"))]
         if not meals:
             return []
         who = "for the vegetarians in your group" if ctx.preferences.diet.applies_to == "some" else "for you"
@@ -259,6 +324,10 @@ OLDER = re.compile(r"\b(6\d|7\d|8\d)s?\b|senior|elderly|retired", re.I)
 WALK_WORDS = ("walk", "walking", "stroll", "hike", "trek", "on foot", "souk", "old town", "heritage", "mall")
 
 
+# A beach or promenade walk: you can turn back any time, a taxi between parts makes no sense (B08)
+STROLL_WORDS = ("beach", "promenade", "marina", "corniche", "boardwalk", "waterfront", "walk")
+
+
 def _older(ctx: Context) -> bool:
     return bool(OLDER.search(ctx.preferences.who or ""))
 
@@ -275,12 +344,20 @@ def walk_checks(ctx: Context) -> list[str]:
     km = ctx.preferences.pace.max_walk_km
     if not km:
         return []
-    out = []
+    long, easy = [], []
     for a in ctx.day.activities:
         if a.kind in ("do", "eat") and any(w in f"{a.name} {a.note}".lower() for w in WALK_WORDS):
-            out.append(f"{a.name}: a lot of walking for your {km:g} km limit; take breaks, "
-                       f"or a taxi between parts of it")
+            (easy if any(w in a.name.lower() for w in STROLL_WORDS) else long).append(a.name)
+    out = []
+    if long:
+        out.append(f"{_join(long)}: a lot of walking for your {km:g} km limit; take breaks, or a taxi between parts of it")
+    if easy:
+        out.append(f"{_join(easy)}: a lot of walking for your {km:g} km limit; take breaks and turn back when you've had enough")
     return out
+
+
+def _join(names: list[str]) -> str:
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
 
 
 def safety_items(ctx: Context) -> list[tuple[str, str, list[str], str]]:
@@ -372,8 +449,8 @@ def must_cover(ctx: Context) -> list[tuple[list[str], list[str], str]]:
         alt = line.split(", or try ", 1)[1].split(" (")[0].lower() if ", or try " in line else None
         out.append((["jain"] if line.startswith("Jain") else ["veg"], [alt] if alt else [], line))
     for line in walk_checks(ctx):
-        name = next(n for n in acts if line.startswith(n))
-        out.append((name_words(name), ["walk", "taxi", "break"], line))
+        head = line.split(": a lot of walking")[0]
+        out.append(([w for n in acts if n in head for w in name_words(n)], ["walk", "taxi", "break"], line))
     # A caution is covered by any line with the matched word ("monkey") and the topic ("bags"), so a
     # model's own "Monkeys grab bags" line isn't doubled by code's (v12, B19).
     out += [([word], topic, line) for _, line, topic, word in safety_items(ctx)]
@@ -396,18 +473,55 @@ def _covers(line: str, name: list[str], topic: list[str]) -> bool:
     return named and (not topic or any(w in l for w in topic))
 
 
-def ensure_covered(heads_ups: list[str], ctx: Context) -> list[str]:
-    out = list(heads_ups)
+MAX_HEADS_UPS = 4
+
+
+def _words(s: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z]+", s.lower()) if len(w) >= 4}
+
+
+def _near_duplicate(a: str, b: str) -> bool:
+    x, y = _words(a), _words(b)
+    return bool(x and y) and len(x & y) / min(len(x), len(y)) >= 0.6
+
+
+def ensure_covered(heads_ups: list[str], ctx: Context, cap: int = MAX_HEADS_UPS) -> list[str]:
+    """Code's must-say items first (the model's line when it covers one, else code's), then the model's
+    other lines while there's room under the cap. Must-say lines are never dropped (scoring sheet,
+    10 Nov: B11 had 9 heads-ups, two of them the same walking caution)."""
+    model, kept = list(heads_ups), []
     for name, topic, line in must_cover(ctx):
-        if not any(_covers(h, name, topic) for h in out):
-            if line.startswith("Leave "):             # a closing time: replace "closes at 17:00, adjust" lines
-                out = [h for h in out if not (_covers(h, name, []) and "clos" in h.lower())]
+        line = line if line.endswith(".") else line + "."
+        if line.startswith("Leave "):
+            # The closing time only ever from the flag: the model wrote "by 16:00" for a 17:00 close (B19)
+            model = [h for h in model if not (_covers(h, name, []) and any(w in h.lower() for w in ("clos", "leave")))]
+            kept.append(line)
+            continue
+        if line.startswith("Long day"):
+            # Code's line says what to do about it (B02, B14)
+            model = [h for h in model if not _covers(h, [], ["long day", "finish", "back at", "back by", "late return"])]
+            kept.append(line)
+            continue
+        if ": a lot of walking" in line:
+            # One line names every long walk; a model line about one of them would hide the rest (B11)
+            model = [h for h in model if not _covers(h, [], ["a lot of walking", "km limit", "walking limit"])]
+            kept.append(line)
+            continue
+        hit = next((h for h in kept + model if _covers(h, name, topic)), None)
+        if hit is None:
             if ", or try " in line:                   # a diet line with an alternative replaces the bare one
-                out = [h for h in out if not _covers(h, name, [])]
+                model = [h for h in model if not _covers(h, name, [])]
             if "usual dinner" in line:                # code's dinner line replaces a model's vaguer one (B04, td.12)
-                out = [h for h in out if not ("dinner" in h.lower() and any(w in h.lower() for w in ("later", "usual", "late")))]
-            out.append(line if line.endswith(".") else line + ".")
-    return out
+                model = [h for h in model if not ("dinner" in h.lower() and any(w in h.lower() for w in ("later", "usual", "late")))]
+            kept.append(line)
+        elif hit in model:
+            model.remove(hit)
+            kept.append(hit)
+    extra: list[str] = []
+    for h in model:
+        if not any(_near_duplicate(h, k) for k in kept + extra):
+            extra.append(h)
+    return kept + extra[:max(0, cap - len(kept))]
 
 
 def leave_by_line(ctx: Context, flag) -> str:

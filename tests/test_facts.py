@@ -136,7 +136,7 @@ def test_late_finish_line_reads_like_a_heads_up():
     pace = NS(dinner_around=None, start_not_before=None, back_by=dt.time(20, 0))
     ctx = NS(preferences=NS(pace=pace), day=NS(activities=[act]))
     [line] = pace_checks(ctx)
-    assert line == "Long day: you finish around 21:15 at Al Ustad Special Kebab, later than your usual 20:00 return"
+    assert line == "Long day: you finish around 21:15 at Al Ustad Special Kebab, later than your usual 20:00 return; leave Al Ustad Special Kebab earlier to be back by 20:00"
     assert "after 20:00" not in line
 
 
@@ -252,7 +252,19 @@ def test_walking_limit_gets_a_caution():
     c = _with_prefs(c, pace=c.preferences.pace.model_copy(update={"max_walk_km": 2}))
     walky = [a for a in c.day.activities if any(w in f"{a.name} {a.note}".lower() for w in ("walk", "souk", "old town", "heritage", "mall"))]
     lines = walk_checks(c)
-    assert len(lines) == len(walky) and all("2 km limit" in l for l in lines)
+    # one line for all of them, not one per stop (scoring sheet, 10 Nov: B11 repeated it)
+    assert len(lines) == 1 and "2 km limit" in lines[0] and all(a.name in lines[0] for a in walky)
+
+
+def test_a_beach_walk_gets_no_taxi_advice():
+    from mb.agents.facts import walk_checks
+    from mb.contracts import Activity
+    c = ctx_for("dubai_up01", 1)
+    c = _with_prefs(c, pace=c.preferences.pace.model_copy(update={"max_walk_km": 2}))
+    walk = Activity(id="w", kind="do", start=dt.time(17), name="JBR Beach walk", note="Stroll on the beach.")
+    c = c.model_copy(update={"day": c.day.model_copy(update={"activities": [walk]})})
+    [line] = walk_checks(c)
+    assert "taxi" not in line and "turn back" in line
 
 
 def test_monkeys_caution_for_children_and_dune_bashing_for_older_travellers():
@@ -276,9 +288,24 @@ def test_weather_clash_with_no_dry_slot_offers_an_indoor_idea():
     from mb.contracts import Candidate, Window
     c = ctx_for("bali_up04", 1, rain=range(6, 23))
     museum = Candidate(id="places:m", provider="google_places", name="ARMA Museum",
-                       window=Window(start=dt.time(13), end=dt.time(16)), types=["museum"])
+                       window=Window(start=dt.time(6), end=dt.time(23)), types=["museum"])
     swap = suggested_swap(c.model_copy(update={"candidates": [museum]}))
-    assert swap and "ARMA Museum" in swap
+    assert swap and "ARMA Museum" in swap and swap.startswith("Rain up to") and "weather turns" not in swap
+
+
+def test_indoor_swap_must_be_open_during_the_clash_and_not_already_planned():
+    """Scoring sheet, 10 Nov: B12 got a swap starting after the beach slot ended; B14 a planned place."""
+    from mb.agents.facts import weather_clashes
+    from mb.contracts import Candidate, Window
+    c = ctx_for("bali_up04", 1, rain=range(6, 23))
+    name = weather_clashes(c)[0].split(" ")[0]
+    a = next(x for x in c.day.activities if x.name.startswith(name))
+    end = a.end or a.start
+    late = Candidate(id="places:l", provider="google_places", name="Late Museum",
+                     window=Window(start=end, end=dt.time(23, 30)), types=["museum"])
+    planned = Candidate(id="places:p", provider="google_places", name=c.day.activities[-1].name,
+                        window=Window(start=dt.time(6), end=dt.time(23)), types=["museum"])
+    assert suggested_swap(c.model_copy(update={"candidates": [late, planned]})) is None
 
 
 def test_judge_cannot_call_a_verified_place_invented():
@@ -344,3 +371,71 @@ def test_code_dinner_line_replaces_the_models_vaguer_one():
             assert sum("dinner" in h.lower() for h in out) == 1
             return
     raise AssertionError("no test day with a late dinner")
+
+
+# ---------- Scoring sheet, 10 Nov (handover points) ----------
+def _forest_flag(c):
+    from mb.contracts import Flag
+    forest = next(a for a in c.day.activities if "Monkey" in a.name)
+    return c.model_copy(update={"flags": [Flag(code="closes_during_visit", activity_id=forest.id,
+                                               message=f"{forest.name}: closes at 17:00, before the planned end at 17:30")]})
+
+
+def test_closing_time_comes_only_from_the_flag():
+    """B19: the model's "leave by 16:00 due to early closing" stood beside a 17:00 close."""
+    c = _forest_flag(ctx_for("bali_up01", 1))
+    out = ensure_covered(["Leave Sacred Monkey Forest by 16:00 due to early closing."], c)
+    assert not any("16:00" in h for h in out)
+    assert any(h.startswith("Leave Sacred Monkey Forest Sanctuary by 17:00") for h in out)
+
+
+def test_heads_ups_are_capped_without_dropping_code_lines():
+    """B11 had 9 heads-ups. Code's must-say lines stay; the model's extras fill up to the cap, no repeats."""
+    from mb.agents.facts import MAX_HEADS_UPS, must_cover
+    c = _forest_flag(ctx_for("bali_up01", 1))
+    must = len(must_cover(c))
+    model = ["Pack a light jacket for the evening.", "Pack a light jacket for the evening, it gets cool.",
+             "Bring sunscreen.", "Try the local coffee.", "Keep small change for parking.", "Charge your phone."]
+    out = ensure_covered(model, c)
+    assert len(out) == max(MAX_HEADS_UPS, must)
+    assert sum("jacket" in h for h in out) <= 1
+    assert any(h.startswith("Leave Sacred Monkey Forest Sanctuary") for h in out)
+
+
+def test_camp_dinner_counts_as_a_meal_for_diet_checks():
+    """B07, B10: the desert safari's camp dinner got no vegetarian check."""
+    from mb.contracts import Activity, Diet
+    c = _with_prefs(ctx_for("dubai_up01", 1), diet=Diet(summary="Vegetarian", restrictions=["vegetarian"]))
+    safari = Activity(id="s", kind="do", start=dt.time(15), end=dt.time(21), name="Desert Safari",
+                      note="Dune drive and camp dinner with BBQ.")
+    c = c.model_copy(update={"day": c.day.model_copy(update={"activities": [safari]}), "candidates": []})
+    assert "Desert Safari" in diet_checks(c)[0]
+
+
+def test_diet_alternative_is_never_a_planned_place():
+    """B14: "or try Zest" on a day that already had Zest Ubud."""
+    from mb.contracts import Activity, Candidate, Diet, Window
+    c = _with_prefs(ctx_for("dubai_up02", 1), diet=Diet(summary="Vegetarian", restrictions=["vegetarian"]))
+    meal = Activity(id="e", kind="eat", start=dt.time(19, 30), name="Zest Ubud")
+    zest = Candidate(id="places:z", provider="google_places", name="Zest",
+                     window=Window(start=dt.time(17), end=dt.time(19)), types=["vegetarian_restaurant"])
+    c = c.model_copy(update={"day": c.day.model_copy(update={"activities": [meal]}), "candidates": [zest]})
+    assert "or try" not in diet_checks(c)[0]
+
+
+def test_an_idea_cannot_repeat_the_diet_alternative_or_a_second_meal_in_its_window():
+    """B02: the idea was the diet alternative again; B04: two lunch places for the same afternoon."""
+    from mb.agents.facts import repeats_code_place
+    from mb.contracts import Activity, Candidate, Diet, Window
+    c = _with_prefs(ctx_for("dubai_up02", 1), diet=Diet(summary="Vegetarian", restrictions=["vegetarian"]))
+    meal = Activity(id="e", kind="eat", start=dt.time(20), name="Ravi Restaurant")
+    eco = Candidate(id="places:e", provider="google_places", name="Eco Mind Cafe",
+                    window=Window(start=dt.time(13, 30), end=dt.time(16)), types=["vegetarian_restaurant", "cafe"])
+    moon = Candidate(id="places:w", provider="google_places", name="Wild & The Moon",
+                     window=Window(start=dt.time(13, 45), end=dt.time(16, 30)), types=["restaurant"])
+    gallery = Candidate(id="places:g", provider="google_places", name="Art Gallery",
+                        window=Window(start=dt.time(14), end=dt.time(16)), types=["art_gallery"])
+    c = c.model_copy(update={"day": c.day.model_copy(update={"activities": [meal]}), "candidates": [eco, moon, gallery]})
+    assert repeats_code_place("Eco Mind Cafe", "14:00-15:00", c)
+    assert repeats_code_place("Wild & The Moon", "13:45-15:00", c)
+    assert not repeats_code_place("Art Gallery", "14:00-15:00", c)

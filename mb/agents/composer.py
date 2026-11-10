@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 
-from mb.agents.facts import (_covers, key_title, ensure_covered, fix_idea_count, safe_tip, spend, suggested_swap, timeline,
+from mb.agents.facts import (_covers, repeats_code_place, key_title, ensure_covered, fix_idea_count, safe_tip, spend, suggested_swap, timeline,
                              tip_problems, unknown_times,
                              weather_clashes, weather_summary)
 from mb.config import AgentSpec
@@ -55,7 +55,8 @@ def merge(ctx: Context, summary: Summary, surprises: Surprises | None,
     s = summary.text
     planned = {a.name.lower() for a in ctx.day.activities} | {n.lower() for n in ctx.other_days}
     items = [i for i in (surprises.items if surprises else [])
-             if i.name.lower() not in planned and _inside(i.fits_slot, ctx)]  # no repeats, no clashes
+             if i.name.lower() not in planned and _inside(i.fits_slot, ctx)       # no repeats, no clashes
+             and not repeats_code_place(i.name, i.fits_slot, ctx)]          # nor a place code already suggests
     swap = suggested_swap(ctx)                                              # code picks the time
     clashes = weather_clashes(ctx)
     actions = (["add_to_day"] if items else []) + (["swap"] if items or swap else []) + ["ask"]
