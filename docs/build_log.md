@@ -401,3 +401,35 @@ B19 had the monkey caution twice (the model's and code's); fixed after v12.
   - Preview by header only.
   - POST /brief, and a date not on the trip refused.
 - **baseline-v14 (the pack sent):** 22/22, 0 fallbacks, 0 agent failures, every rule passed, 13 green and 9 amber, first score 82.9 (v12 85.2, v13 84.4: within the judge's noise), $0.0131 per brief. Same codes as the pack Travezy reviewed.
+
+## 10 Nov: handover fixes from Travezy's v14 scoring sheet
+
+Brief 6 is closed. Sourabh sent five handover points with the scoring sheet for the v14 pack (12 send, 7 fix first, 1 don't send). All five are fixed in code, plus three smaller patterns from the sheet's comments.
+
+| Point | Brief | Fix |
+|---|---|---|
+| Closing time stated wrongly | B19 (don't send): "leave by 16:00" against a 17:00 close | The closing line is only ever code's, from the flag; any model line about closing or leaving that place is dropped |
+| Too many heads-ups, repeats | B11: 9 lines, the walking caution twice | Must-say lines first and never dropped; one walking line for all stops; model extras fill up to 4, near-copies removed (B11 now 7, all must-say) |
+| Places suggested twice | B04-B06, B12, B14 | An idea can't repeat the swap or the diet alternative, or be a second food place in the same window; the indoor swap must be open during the clash |
+| Places already in the plan | B14: "or try Zest" on a Zest Ubud day | Diet alternatives and swaps skip anything already planned (name match either way) |
+| Wording | B12, B08 | Swap names the forecast ("Up to 38°C at JBR Beach: swap it for..."); beach and promenade walks say "turn back when you've had enough", not "taxi" |
+| Camp dinner unchecked | B07, B10 | A meal inside an activity (dinner, BBQ, buffet) gets the diet check |
+| Late finish, no advice | B02, B14 | The long-day line says what to do ("ask the driver to finish by 20:00") |
+
+Tests: 233 passed, 8 skipped (5 new). Commit 88a463d.
+
+**baseline-v15** (same contexts, no rebuild): 22/22, 0 fallbacks, rules 100%, audit 22/22 clean, 17 pass / 5 fix, 13 green / 9 amber, average score 85.2 (v14: 82.9), $0.30 for the run.
+
+**Judges against Travezy's v14 verdicts (20 briefs):**
+
+| Judge | Agreement | Weighted kappa | Unsafe caught | 6 Nov (v9) |
+|---|---|---|---|---|
+| gpt-5-mini | 65% | 0.255 | 0/1 | 55%, 0.09 |
+| gpt-4o-mini | 55% | 0.151 | 0/1 | 45%, 0.00 |
+
+Both judges wrote B19's wrong closing time in their notes but didn't mark it serious, so the brief wasn't blocked; the fix above removes the cause in code. gpt-4o-mini's notes are mostly noise ("no rain expected" against a 5% chance on 8 briefs). gpt-5-mini stays the recommendation, with cutoffs green 90 / amber 85 on this sheet (kappa 0.365): 20 briefs is too few to set them for good.
+
+**Left open:**
+- B18 (38°C beach with children) and B12: no indoor place nearby is open during the heat, so there is no swap; the heads-up gives the heat advice.
+- td.05: the camp-dinner diet alternative is a cafe open at breakfast time; alternatives aren't matched to the meal's time yet.
+- openai/gpt-4o reaches end of life on 1 Jan 2027: the writers need a successor model chosen and re-run before then.
