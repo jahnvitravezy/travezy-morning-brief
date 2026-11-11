@@ -631,6 +631,7 @@ def tip_problems(tip: str, ctx: Context) -> list[str]:
     out += [f"tip makes a safety claim we can't verify ('{m.group(0)}')" for p in SAFETY_CLAIMS
             if (m := re.search(p, low))]
     out += [f"tip uses a time nothing gave it ({t})" for t in unknown_times(tip, ctx)]
+    out += ["tip says a place has food for the diet, which nothing confirms"] if diet_claim(tip) else []
     out += [f"tip makes a claim we can't verify ('{c.strip()}')" for c in unverified_claims(tip)]
     clash = {c.split(" ")[0].lower() for c in weather_clashes(ctx)}
     for a in ctx.day.activities:
@@ -654,6 +655,33 @@ def safe_tip(ctx: Context) -> str:
         if hottest >= 30:
             return f"Carry water and sun cover: it reaches {hottest:.0f}°C today."
     return "Keep a copy of today's bookings on your phone in case you lose signal."
+
+
+BODY_LIMIT = 90
+
+
+def fit_body(body: str, limit: int = BODY_LIMIT) -> str:
+    """The notification body inside its length limit, cut at the last clause or word that fits.
+    A body 5 characters too long, twice, cost a whole brief its text (gpt-5-mini, td.16, 11 Nov):
+    length is a fact code can enforce, like the title."""
+    if len(body) <= limit:
+        return body
+    head = body[:limit + 1]
+    for sep in (". ", "; ", ", ", " and ", " "):
+        i = head.rfind(sep)
+        if i >= limit // 2:
+            return head[:i].rstrip(" ,;.:")
+    return body[:limit].rstrip()
+
+
+# A model saying a place has food for the diet: nothing we fetch confirms a menu, so code's
+# "check X has vegetarian dishes" line stands instead (gpt-4o, td.14, 11 Nov: "Vegetarian options available").
+DIET_CLAIM = re.compile(r"\b(vegetarian|vegan|jain|veg)\b[- ]?(friendly\b|(food|options?|dishes|menu|meals?)"
+                        r"( (is|are))? (available|offered|served)\b)", re.I)
+
+
+def diet_claim(text: str) -> bool:
+    return bool(DIET_CLAIM.search(text))
 
 
 def fix_idea_count(body: str, n: int) -> str:

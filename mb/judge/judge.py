@@ -45,6 +45,16 @@ OMISSION_WORDS = ("does not mention", "doesn't mention", "fails to mention", "no
 INVENTED_WORDS = ("invent", "not in the input", "not in inputs", "does not exist", "doesn't exist", "made up", "fabricat", "hallucinat")
 
 
+def _same_fact(quote: str, code_line: str) -> bool:
+    """The model repeating a code line in fewer words ("leave Monkey Forest by 17:00" for "Leave Sacred
+    Monkey Forest Sanctuary by 17:00: ..."): every word and time of the quote is in the code line.
+    The judge called that a contradiction of the 17:30 plan and the brief lost its text (td.12, 11 Nov)."""
+    import re
+    words = lambda t: [w.strip(":") for w in re.findall(r"[a-z0-9:]+", t) if w.strip(":")]
+    q, c = words(quote), set(words(code_line))
+    return len(q) >= 3 and all(w in c for w in q)
+
+
 def confirm_serious(serious: list[str], brief: MorningBrief, ctx: Context) -> tuple[list[str], list[str]]:
     """(confirmed, dropped). A serious error stands only if it quotes the brief word for word and
     the quote isn't a line code computed (weather line, must-report checks)."""
@@ -69,7 +79,7 @@ def confirm_serious(serious: list[str], brief: MorningBrief, ctx: Context) -> tu
             dropped.append(f"{s} [not serious: a missing mention; code enforces must-say facts]")
         elif not quotes:
             dropped.append(f"{s} [not serious: quotes nothing from the brief]")
-        elif all(any(q in c for c in code_lines) for q in quotes):
+        elif all(any(q in c or _same_fact(q, c) for c in code_lines) for q in quotes):
             dropped.append(f"{s} [not serious: about a fact code computed]")
         elif any(w in low for w in INVENTED_WORDS) and any(v in q for q in quotes for v in verified):
             dropped.append(f"{s} [not serious: the place is verified (plan or Google Places)]")

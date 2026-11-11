@@ -454,3 +454,32 @@ def test_diet_alternative_matches_the_meal_it_replaces():
     day = c.day.model_copy(update={"activities": [safari]})
     assert "or try" not in diet_checks(c.model_copy(update={"day": day, "candidates": [cafe]}))[0]
     assert "or try Evening Veg Kitchen" in diet_checks(c.model_copy(update={"day": day, "candidates": [cafe, late]}))[0]
+
+
+# ---------- Model switch, 11 Nov: what cost gpt-5-mini and gpt-4o a brief ----------
+def test_body_is_cut_to_its_limit_at_a_clause():
+    from mb.agents.facts import fit_body
+    long = "Rice terraces this morning, lunch at Clear Cafe, then the Monkey Forest before a late dinner in Ubud"
+    out = fit_body(long)
+    assert len(long) > 90 and len(out) <= 90 and long.startswith(out) and not out.endswith((",", " "))
+    assert fit_body("Old Dubai and the souks") == "Old Dubai and the souks"
+
+
+def test_a_model_cannot_say_the_diet_is_catered_for():
+    from mb.agents.facts import diet_claim
+    assert diet_claim("Penida Colada: vegetarian options available.")
+    assert diet_claim("A vegan-friendly cafe by the beach.")
+    assert not diet_claim("Vegetarian food: check Penida Colada has vegetarian dishes for you.")
+
+
+def test_judge_cannot_call_a_repeated_code_line_a_contradiction():
+    from mb.agents.composer import safe_version
+    from mb.judge.judge import confirm_serious
+    c = _forest_flag(ctx_for("bali_up01", 1))
+    brief = safe_version(c, "t")
+    brief.notification.body = "Rice terraces, then leave Monkey Forest by 17:00"
+    ok, dropped = confirm_serious(["The brief states 'leave Monkey Forest by 17:00', but the planned visit ends at 17:30."], brief, c)
+    assert not ok and dropped
+    brief.notification.body = "Rice terraces, then leave Monkey Forest by 16:00"
+    ok, _ = confirm_serious(["The brief states 'leave Monkey Forest by 16:00', but it closes at 17:00."], brief, c)
+    assert ok
