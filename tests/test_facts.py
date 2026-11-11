@@ -111,7 +111,7 @@ def test_tip_with_an_unknown_place_or_risky_advice_is_replaced():
     from mb.agents.facts import safe_tip, tip_problems
     c = build_context(L.load("dubai_up02"), 1)
     assert tip_problems("At Al Fahidi, visit the Coffee Museum for a unique experience.", c)
-    assert tip_problems("At Gold and Spice Souks, look for saffron.", c) == []
+    assert tip_problems("At Gold and Spice Souks, carry small cash.", c) == []
     assert tip_problems("Take the steep path down for a closer view.", c)
     assert safe_tip(c)
 
@@ -518,3 +518,30 @@ def test_a_model_dinner_line_that_covers_the_check_is_kept_once():
              "You usually eat earlier: consider an earlier table."]
     out = ensure_covered(model, c, cap=20)
     assert sum("dinner" in h.lower() or "eat" in h.lower() for h in out) == 1
+
+
+def test_a_tip_may_only_use_words_from_the_trip_or_the_practical_list():
+    """gpt-5-mini, 11 Nov: each read found a new invented detail in the tip, so the rule turned round."""
+    from mb.agents.facts import safe_tip, tip_problems
+    c = ctx_for("dubai_up01", 1)
+    place = next(a.name for a in c.day.activities if a.kind == "do")
+    assert tip_problems(f"At {place}, arrive early to get a spot on the observation deck facing the fountain.", c)
+    assert tip_problems("Head to the main street late morning; peak bargains appear just after opening.", c)
+    assert not tip_problems(f"Leave {place} early and carry water.", c)
+    assert not tip_problems(safe_tip(c), c)
+
+
+def test_judge_cannot_block_a_time_that_agrees_with_a_must_say_line():
+    from mb.agents.composer import safe_version
+    from mb.judge.judge import confirm_serious
+    c = _forest_flag(ctx_for("bali_up01", 1))
+    brief = safe_version(c, "t")
+    brief.notification.body = "Tegallalang at 10:00; Monkey Forest must end by 17:00"
+    ok, _ = confirm_serious(["The brief states 'Monkey Forest must end by 17:00', but the planned visit ends at 17:30."], brief, c)
+    assert not ok
+    brief.notification.body = "Rain at Kelingking and Crystal Bay"
+    ok, _ = confirm_serious(["The brief states 'Rain at Kelingking and Crystal Bay', but it should specify 'rain likely 07:00-22:00'."], brief, c)
+    assert not ok
+    brief.notification.body = "Monkey Forest must end by 16:00"
+    ok, _ = confirm_serious(["The brief states 'Monkey Forest must end by 16:00', but it closes at 17:00."], brief, c)
+    assert ok

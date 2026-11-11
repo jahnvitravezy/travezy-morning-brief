@@ -637,6 +637,34 @@ def known_names(ctx: Context) -> set[str]:
     return {w.strip(".,:;!?'()").lower() for n in names for w in n.split() if w}
 
 
+# Everyday words a tip may use besides the words of the trip itself. A tip is the one line with no
+# fact behind it, and each model invents differently there ("observation deck facing the fountain",
+# "peak bargains just after opening", "spot yachts and shaded cafes": gpt-5-mini, 11 Nov). A list of
+# banned words can't keep up, so the rule is the other way round: a tip may only use words from the
+# trip's own inputs plus this practical vocabulary. Anything else, and code's tip is sent.
+TIP_VOCAB = frozenset("""
+carry bring pack wear take keep hold have make allow plan book confirm check ask tell call leave arrive
+start finish head visit stay rest stop walk move reach meet avoid enjoy want like need should will
+water bottle cover sunscreen protection shade umbrella jacket rain layers shoes cash change phone
+battery copy bookings booking booked ticket tickets entry timed slot pickup hotel taxi driver airport flight
+breakfast lunch dinner meal table snack snacks break breaks pace time times extra minutes hour hours
+early earlier late later before after between during until while when then first next last again
+today tonight morning afternoon evening midday there here your with from that this than into about
+around more most some each everyone group children kids close slowly short light small good ready
+case lose signal reaches likely degrees heat cool warm weather staff venue place stop spot dishes options
+vegetarian vegan jain food eat packed bags tightly once also only just them they their what where
+""".split())
+
+
+def ungrounded_words(text: str, ctx: Context) -> list[str]:
+    p = ctx.preferences
+    inputs = " ".join([plan_text(ctx), ctx.region or "", p.diet.summary, p.pace.summary, " ".join(p.interests),
+                       " ".join(f"{c.snippet} {' '.join(c.types)}" for c in ctx.candidates)]).replace("_", " ")
+    known = _words(inputs) | TIP_VOCAB
+    ok = lambda w: w in known or w.rstrip("s") in known or w + "s" in known or (w.endswith("ing") and w[:-3] in known)
+    return sorted(w for w in _words(text) if not ok(w))
+
+
 def tip_problems(tip: str, ctx: Context) -> list[str]:
     """Why a tip can't be sent: it names a place we don't know, or gives risky advice."""
     import re
@@ -654,6 +682,8 @@ def tip_problems(tip: str, ctx: Context) -> list[str]:
             if (m := re.search(p, low))]
     out += [f"tip uses a time nothing gave it ({t})" for t in unknown_times(tip, ctx)]
     out += ["tip says a place has food for the diet, which nothing confirms"] if diet_claim(tip) else []
+    loose = ungrounded_words(tip, ctx)
+    out += [f"tip uses words nothing in the trip supports ({', '.join(loose[:4])})"] if loose else []
     out += [f"tip makes a claim we can't verify ('{c.strip()}')" for c in unverified_claims(tip, plan_text(ctx))]
     clash = {c.split(" ")[0].lower() for c in weather_clashes(ctx)}
     for a in ctx.day.activities:

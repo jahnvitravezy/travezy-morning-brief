@@ -41,7 +41,9 @@ def _norm(t: str) -> str:
 
 
 OMISSION_WORDS = ("does not mention", "doesn't mention", "fails to mention", "not mention", "omits", "omitted",
-                  "does not include", "doesn't include", "is missing", "no mention")
+                  "does not include", "doesn't include", "is missing", "no mention",
+                  # "it should specify 'rain likely 07:00-22:00'": a wish for more detail, not an error (td.14, 11 Nov)
+                  "should specify", "should mention", "should clarify", "should state", "should include")
 INVENTED_WORDS = ("invent", "not in the input", "not in inputs", "does not exist", "doesn't exist", "made up", "fabricat", "hallucinat")
 
 
@@ -53,6 +55,20 @@ def _same_fact(quote: str, code_line: str) -> bool:
     words = lambda t: [w.strip(":") for w in re.findall(r"[a-z0-9:]+", t) if w.strip(":")]
     q, c = words(quote), set(words(code_line))
     return len(q) >= 3 and all(w in c for w in q)
+
+
+def _agrees_with_must_say(quote: str, ctx: Context) -> bool:
+    """The quote gives a time that a must-say line gives for the same place ("Monkey Forest must end by
+    17:00" beside code's "Leave Sacred Monkey Forest Sanctuary by 17:00"): the judge read the planned
+    17:30 as a contradiction twice (td.12, td.15, 11 Nov). Only must-say lines count, not the timeline:
+    "by 16:00", the visit's start, must stay an error (B19)."""
+    times = set(re.findall(r"\b\d{1,2}:\d{2}\b", quote))
+    words = {w for w in re.findall(r"[a-z]+", quote) if len(w) >= 5}
+    for _, _, line in must_cover(ctx):
+        low = _norm(line)
+        if times and times <= set(re.findall(r"\b\d{1,2}:\d{2}\b", low)) and any(w in low for w in words):
+            return True
+    return False
 
 
 def confirm_serious(serious: list[str], brief: MorningBrief, ctx: Context) -> tuple[list[str], list[str]]:
@@ -79,7 +95,7 @@ def confirm_serious(serious: list[str], brief: MorningBrief, ctx: Context) -> tu
             dropped.append(f"{s} [not serious: a missing mention; code enforces must-say facts]")
         elif not quotes:
             dropped.append(f"{s} [not serious: quotes nothing from the brief]")
-        elif all(any(q in c or _same_fact(q, c) for c in code_lines) for q in quotes):
+        elif all(any(q in c or _same_fact(q, c) for c in code_lines) or _agrees_with_must_say(q, ctx) for q in quotes):
             dropped.append(f"{s} [not serious: about a fact code computed]")
         elif any(w in low for w in INVENTED_WORDS) and any(v in q for q in quotes for v in verified):
             dropped.append(f"{s} [not serious: the place is verified (plan or Google Places)]")
