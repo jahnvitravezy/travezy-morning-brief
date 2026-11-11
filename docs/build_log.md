@@ -433,3 +433,38 @@ Both judges wrote B19's wrong closing time in their notes but didn't mark it ser
 - B18 (38°C beach with children) and B12: no indoor place nearby is open during the heat, so there is no swap; the heads-up gives the heat advice.
 - td.05: the camp-dinner diet alternative is a cafe open at breakfast time; alternatives aren't matched to the meal's time yet.
 - openai/gpt-4o reaches end of life on 1 Jan 2027: the writers need a successor model chosen and re-run before then.
+
+## 11 Nov: replacing gpt-4o in the three writing agents
+
+Travezy's reply to the handover update set the priority: gpt-4o reaches end of life on 1 Jan 2027, and their main app is moving off the same models this month. Asked for: a recommended replacement for the Summariser, Surprise finder and Composer, with scores, fallbacks, time and cost on the 22 days. Also asked: the diet alternative must match the meal it replaces (done: an alternative has to be open in the same part of the day, breakfast, lunch or dinner).
+
+**First comparison** (baseline-v16 against cmp-writers-gpt5mini) had fallbacks on both sides: 1 for gpt-4o, 2 for gpt-5-mini. None was a crash or a timeout. Each was traced and fixed in code:
+
+| Run | Day | Why the brief fell back to the safe version | Fix |
+|---|---|---|---|
+| gpt-5-mini | td.16 | Notification body 95 characters (limit 90), on both attempts; everything else scored 100 | Code cuts the body at the last clause that fits, as it already sets the title |
+| gpt-5-mini | td.12 | Judge false alarm: the model's "leave Monkey Forest by 17:00" (correct, from the flag) called a contradiction of the 17:30 plan | A serious error can't stand on a quote that repeats a code line in fewer words |
+| gpt-4o | td.14 | The model wrote "Vegetarian options available", which nothing we fetch confirms | Any model line saying a place caters for the diet is dropped; code's "check X has vegetarian dishes" stands |
+
+**Second comparison, same code (commit 765107e), same 22 days, same judge (gpt-4o-mini):**
+
+| | gpt-4o (baseline-v17) | gpt-5-mini, all three writers (cmp-writers-gpt5mini-v2) |
+|---|---|---|
+| Briefs written | 22/22 | 22/22 |
+| Fallbacks / agent failures | 0 / 0 | 0 / 0 |
+| Rule checks | 100% | 100% |
+| Average score | 85.0 | 84.4 |
+| Pass / fix | 18 / 4 | 16 / 6 |
+| Green / amber / red | 14 / 8 / 0 | 14 / 8 / 0 |
+| Audit against the facts | 22 clean | 21 clean, 1 flagged (td.18: two late-arrival lines for two different stops, worded alike) |
+| Time per brief: average / median / slowest | 9.8 s / 8.4 s / 15.8 s | 16.9 s / 15.0 s / 34.6 s |
+| Cost for 22 briefs | $0.243 | $0.051 |
+| Cost per brief | $0.0111 | $0.0023 |
+
+**Recommendation: openai/gpt-5-mini for all three writers**, with reasoning effort "minimal" (already in config/models.yaml; without it the model timed out in October). Quality is level within run-to-run noise (0.6 points on a judge that moves about 1 point between identical runs), there are no fallbacks, and it costs 4.8 times less. The price is time: about 7 seconds more per brief, and the slowest took 34.6 s. Briefs are prepared by the batch ahead of send time, so this doesn't reach the traveller; an on-demand path would need the 30 s budget looked at.
+
+**Not changed yet:** config/agents.yaml still names gpt-4o. The switch is one line per agent and waits for Travezy's go-ahead, since they want both products on the same model.
+
+**Still to decide:** the judge. gpt-5-mini agrees best with Travezy's verdicts (65%, kappa 0.26), but with gpt-5-mini also writing, the judge would be marking its own model's work. The self-preference check (data/runs/self_preference.json) should be re-run on that pairing before the judge moves too.
+
+Tests: 237 passed, 8 skipped.
