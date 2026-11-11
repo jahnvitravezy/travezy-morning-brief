@@ -490,6 +490,7 @@ def test_idea_count_leaves_no_stray_dash():
     assert fix_idea_count("Dubai Mall 10:00; Desert Safari 15:00 — plus 1 idea for you", 1) == "Dubai Mall 10:00; Desert Safari 15:00, plus 1 idea for you"
     assert fix_idea_count("Rain 13:00-17:00, dinner tonight +1 ideas for you", 1) == "Rain 13:00-17:00, dinner tonight, plus 1 idea for you"
     assert fix_idea_count("Dubai Mall, then the safari — plus 2 ideas for you", 0) == "Dubai Mall, then the safari"
+    assert fix_idea_count("Dubai Mall morning; Desert Safari 15:00 pickup., plus 1 idea for you", 1) == "Dubai Mall morning; Desert Safari 15:00 pickup, plus 1 idea for you"
 
 
 def test_details_nothing_confirms_are_claims_unless_the_plan_says_them():

@@ -716,6 +716,7 @@ def fit_body(body: str, limit: int = BODY_LIMIT) -> str:
     """The notification body inside its length limit, cut at the last clause or word that fits.
     A body 5 characters too long, twice, cost a whole brief its text (gpt-5-mini, td.16, 11 Nov):
     length is a fact code can enforce, like the title."""
+    body = body.strip()
     if len(body) <= limit:
         return body
     head = body[:limit + 1]
@@ -741,7 +742,7 @@ def fix_idea_count(body: str, n: int) -> str:
     model filling a template; the count is a fact, so code sets it."""
     import re
     # also "— plus 1 idea" and "+1 ideas" (gpt-5-mini, 11 Nov: bodies ended "—, plus 1 idea for you")
-    pat = re.compile(r"\s*[,;—–-]*\s*(?:and|plus|\+)\s*(?:\d+|one|two|three|no)\s+ideas?(?:\s+for\s+you)?", re.I)
+    pat = re.compile(r"\s*[.,;—–-]*\s*(?:and|plus|\+)\s*(?:\d+|one|two|three|no)\s+ideas?(?:\s+for\s+you)?", re.I)
     if not pat.search(body):
         return body
     repl = "" if n == 0 else f", plus {n} idea{'s' if n > 1 else ''} for you"

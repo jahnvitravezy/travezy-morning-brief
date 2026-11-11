@@ -468,3 +468,39 @@ Travezy's reply to the handover update set the priority: gpt-4o reaches end of l
 **Still to decide:** the judge. gpt-5-mini agrees best with Travezy's verdicts (65%, kappa 0.26), but with gpt-5-mini also writing, the judge would be marking its own model's work. The self-preference check (data/runs/self_preference.json) should be re-run on that pairing before the judge moves too.
 
 Tests: 237 passed, 8 skipped.
+
+### 11 Nov, later: reading the gpt-5-mini briefs, and the final comparison
+
+The table above had level scores, so before sending the recommendation every gpt-5-mini brief was read line by line. The scores had not shown what the reading did. Four reads, four rounds of fixes, each followed by a fresh run of both models:
+
+| Found by reading | Fix (in code, with a test) |
+|---|---|
+| "—, plus 1 idea for you" at the end of 8 notification bodies | The idea count replaces any dash or stop before it |
+| Invented details: "rooftop dinner tonight" on a free day, "textured murals in the courtyard", "hotel curfew 20:00" | Claims nothing confirms are removed from heads-ups and the body unless the plan says them; a body that fails is written from the plan |
+| The same pickup, and the same late dinner, said twice | Two lines about the same timed thing become one |
+| The tip repeating a heads-up ("leave Monkey Forest by 17:00") | A tip can't repeat a heads-up |
+| Tips kept inventing: "observation deck facing the fountain", "peak bargains just after opening" | The rule turned round: a tip may only use words from the trip's own inputs plus a short practical vocabulary; otherwise code's tip is sent. Tips are plainer now, and true |
+| Two judge false alarms that cost a brief its text (a correct "must end by 17:00"; "should specify the rain hours") | A serious error can't stand against a time that agrees with a must-say line for the same place, and "should specify / mention" is a fix, not serious. A wrong time (B19's "by 16:00") still blocks: tested |
+
+One of these rounds introduced a bug of its own: the rule against a repeated dinner line sat in the wrong branch and dropped the late-dinner line whenever the model had already covered it (td.11). The audit flagged the brief, though its message named the wrong line because it still assumed the old order of heads-ups. Both fixed, with a test; the gpt-4o run was re-audited and was not affected.
+
+**Final comparison (commit 5810731; same code, same 22 days, same judge gpt-4o-mini). These are the numbers sent to Travezy; the run was named as final before it started, so it is reported as it came.**
+
+| | gpt-4o (baseline-v21) | gpt-5-mini, all three writers (cmp-writers-gpt5mini-v6) |
+|---|---|---|
+| Briefs written | 22/22 | 22/22 |
+| Fallbacks / agent failures | 0 / 0 | 0 / 0 |
+| Rule checks | 100% | 100% |
+| Average score | 84.2 | 84.2 |
+| Pass / fix | 16 / 6 | 15 / 7 |
+| Green / amber / red | 14 / 8 / 0 | 13 / 9 / 0 |
+| Audit against the facts | 22 clean | 22 clean |
+| Time per brief: average / median / slowest | 14.2 s / 10.4 s / 56.9 s | 16.8 s / 17.7 s / 31.4 s |
+| Cost for 22 briefs | $0.246 | $0.053 |
+| Cost per brief | $0.0112 | $0.0024 |
+
+Across the six pairs of runs today, fallbacks were 1, 0, 0, 0, 1, 0 for gpt-4o and 2, 0, 0, 0, 1, 0 for gpt-5-mini; every one traced to a format limit or a judge false alarm, none to a writer failing, and each cause is now handled in code.
+
+After this run, one cosmetic fix: a body ending "pickup., plus 1 idea for you" (td.08) now loses the stray full stop. Tests: 244 passed, 8 skipped.
+
+The recommendation stands: **openai/gpt-5-mini for all three writers**, reasoning effort "minimal". Level on score and on the audit, 4.6 times cheaper, about 7 seconds slower at the median. What the day showed beyond the numbers: a new model writes differently, and the differences don't show in an average score. Any future model switch should include reading the briefs, not only the table.
