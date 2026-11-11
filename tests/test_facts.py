@@ -504,3 +504,17 @@ def test_same_timed_thing_is_said_once():
     from mb.agents.facts import _same_moment
     assert _same_moment("Evening Desert Safari: pickup at 15:00.", "Pickup at 15:00 from your hotel — be ready early.")
     assert not _same_moment("Evening Desert Safari: pickup at 15:00.", "Be at Burj Khalifa for 17:00.")
+
+
+def test_a_model_dinner_line_that_covers_the_check_is_kept_once():
+    """11 Nov: a misplaced branch dropped the late-dinner line whenever the model had covered it (td.11)."""
+    from mb.agents.facts import must_cover, pace_checks
+    c = ctx_for("bali_up04", 1)
+    late = [l for l in pace_checks(c) if "usual dinner" in l]
+    if not late:
+        return
+    t = next(topic for _, topic, line in must_cover(c) if "usual dinner" in line)[0]
+    model = [f"Dinner is at {t}, later than your usual time; book earlier if you can.",
+             "You usually eat earlier: consider an earlier table."]
+    out = ensure_covered(model, c, cap=20)
+    assert sum("dinner" in h.lower() or "eat" in h.lower() for h in out) == 1

@@ -20,7 +20,7 @@ import re
 import sys
 from pathlib import Path
 
-from mb.agents.facts import (INDOOR_WORDS, ensure_covered, suggested_swap, tip_problems, unknown_times,
+from mb.agents.facts import (INDOOR_WORDS, plan_text, ensure_covered, suggested_swap, tip_problems, unknown_times,
                              unverified_claims, HOT_C, RAIN_PROB)
 from mb.config import load_config
 from mb.contracts import Context, MorningBrief
@@ -98,14 +98,14 @@ def audit_brief(ctx: Context, b: MorningBrief, limits: dict) -> list[str]:
             out.append(f"unknown time {t} in heads-up '{h[:60]}'")
     for t in unknown_times(b.local_tip or "", ctx):
         out.append(f"unknown time {t} in tip")
-    support = " ".join(f"{c.name} {c.snippet} {' '.join(c.types)}" for c in ctx.candidates)
+    support = " ".join(f"{c.name} {c.snippet} {' '.join(c.types)}" for c in ctx.candidates) + " " + plan_text(ctx)
     for w in unverified_claims(b.local_tip or "", support):
         out.append(f"unsupported claim '{w}' in tip")
     for p in tip_problems(b.local_tip or "", ctx):
         out.append(f"tip: {p}")
 
     # must-say facts
-    missing = ensure_covered(b.heads_ups, ctx)[len(b.heads_ups):]
+    missing = [x for x in ensure_covered(b.heads_ups, ctx) if x not in b.heads_ups]   # lines code would still add
     out += [f"must-say not covered: {x[:80]}" for x in missing]
 
     # duplicates

@@ -539,12 +539,12 @@ def ensure_covered(heads_ups: list[str], ctx: Context, cap: int = MAX_HEADS_UPS)
             if "usual dinner" in line:                # code's dinner line replaces a model's vaguer one (B04, td.12)
                 model = [h for h in model if not ("dinner" in h.lower() and any(w in h.lower() for w in ("later", "usual", "late")))]
             kept.append(line)
-        if "usual dinner" in line:                    # and no second line saying the same ("You usually eat by 19:00...")
-            model = [h for h in model if not (any(w in h.lower() for w in ("dinner", "eat ", "table"))
-                                              and any(w in h.lower() for w in ("usual", "earlier")))]
         elif hit in model:
             model.remove(hit)
             kept.append(hit)
+        if "usual dinner" in line:                    # and no second line saying the same ("You usually eat by 19:00...")
+            model = [h for h in model if not (any(w in h.lower() for w in ("dinner", "eat ", "table"))
+                                              and any(w in h.lower() for w in ("usual", "earlier")))]
     extra: list[str] = []
     for h in model:
         if not any(_near_duplicate(h, k) or _same_moment(h, k) for k in kept + extra):
