@@ -224,10 +224,10 @@ def test_diet_clash_offers_a_checked_alternative():
     from mb.contracts import Candidate, Window
     c = ctx_for("dubai_up01", 1)
     alt = Candidate(id="places:v", provider="google_places", name="Rangoli Veg Kitchen",
-                    window=Window(start=dt.time(14), end=dt.time(16)), types=["vegetarian_restaurant"], travel_min=8)
+                    window=Window(start=dt.time(18), end=dt.time(20)), types=["vegetarian_restaurant"], travel_min=8)
     lines = diet_checks(c.model_copy(update={"candidates": [alt]}))
     assert lines, "this day has a planned meal not marked vegetarian"
-    assert "or try Rangoli Veg Kitchen (14:00-16:00, 8 min away)" in lines[0]
+    assert "or try Rangoli Veg Kitchen (18:00-20:00, 8 min away)" in lines[0]
 
 
 def _with_prefs(c, **update):
@@ -241,7 +241,7 @@ def test_jain_travellers_get_a_vegetarian_alternative_with_a_jain_note():
     c = ctx_for("dubai_up02", 1)
     c = _with_prefs(c, diet=Diet(summary="Jain", restrictions=["jain", "vegetarian"]))
     veg = Candidate(id="places:v", provider="google_places", name="Rangoli Veg Kitchen",
-                    window=Window(start=dt.time(14), end=dt.time(16)), types=["vegetarian_restaurant"])
+                    window=Window(start=dt.time(18), end=dt.time(20)), types=["vegetarian_restaurant"])
     line = diet_checks(c.model_copy(update={"candidates": [veg]}))[0]
     assert "or try Rangoli Veg Kitchen" in line and "ask for Jain preparation" in line
 
@@ -325,7 +325,7 @@ def test_model_diet_line_is_replaced_when_code_has_an_alternative():
     from mb.agents.facts import ensure_covered
     c = ctx_for("dubai_up01", 1)
     alt = Candidate(id="places:v", provider="google_places", name="Rangoli Veg Kitchen",
-                    window=Window(start=dt.time(14), end=dt.time(16)), types=["vegetarian_restaurant"])
+                    window=Window(start=dt.time(18), end=dt.time(20)), types=["vegetarian_restaurant"])
     c = c.model_copy(update={"candidates": [alt]})
     meal = next(a.name for a in c.day.activities if a.kind == "eat" and "veg" not in f"{a.name} {a.note}".lower())
     out = ensure_covered([f"You're vegetarian: {meal}, ask for veg options first."], c)
@@ -428,7 +428,7 @@ def test_an_idea_cannot_repeat_the_diet_alternative_or_a_second_meal_in_its_wind
     from mb.agents.facts import repeats_code_place
     from mb.contracts import Activity, Candidate, Diet, Window
     c = _with_prefs(ctx_for("dubai_up02", 1), diet=Diet(summary="Vegetarian", restrictions=["vegetarian"]))
-    meal = Activity(id="e", kind="eat", start=dt.time(20), name="Ravi Restaurant")
+    meal = Activity(id="e", kind="eat", start=dt.time(12), name="Ravi Restaurant")
     eco = Candidate(id="places:e", provider="google_places", name="Eco Mind Cafe",
                     window=Window(start=dt.time(13, 30), end=dt.time(16)), types=["vegetarian_restaurant", "cafe"])
     moon = Candidate(id="places:w", provider="google_places", name="Wild & The Moon",
@@ -439,3 +439,18 @@ def test_an_idea_cannot_repeat_the_diet_alternative_or_a_second_meal_in_its_wind
     assert repeats_code_place("Eco Mind Cafe", "14:00-15:00", c)
     assert repeats_code_place("Wild & The Moon", "13:45-15:00", c)
     assert not repeats_code_place("Art Gallery", "14:00-15:00", c)
+
+
+def test_diet_alternative_matches_the_meal_it_replaces():
+    """Travezy, 11 Nov: a camp dinner got a breakfast cafe (08:00-09:18) as its alternative."""
+    from mb.contracts import Activity, Candidate, Diet, Window
+    c = _with_prefs(ctx_for("dubai_up01", 1), diet=Diet(summary="Vegetarian", restrictions=["vegetarian"]))
+    safari = Activity(id="s", kind="do", start=dt.time(15), end=dt.time(21), name="Evening Desert Safari",
+                      note="Dune drive and camp dinner with BBQ.")
+    cafe = Candidate(id="places:b", provider="google_places", name="Morning Veg Cafe",
+                     window=Window(start=dt.time(8), end=dt.time(9, 15)), types=["vegetarian_restaurant"])
+    late = Candidate(id="places:d", provider="google_places", name="Evening Veg Kitchen",
+                     window=Window(start=dt.time(18), end=dt.time(20)), types=["vegetarian_restaurant"])
+    day = c.day.model_copy(update={"activities": [safari]})
+    assert "or try" not in diet_checks(c.model_copy(update={"day": day, "candidates": [cafe]}))[0]
+    assert "or try Evening Veg Kitchen" in diet_checks(c.model_copy(update={"day": day, "candidates": [cafe, late]}))[0]

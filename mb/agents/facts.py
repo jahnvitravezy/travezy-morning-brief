@@ -226,11 +226,29 @@ def suggested_swap(ctx: Context) -> str | None:
 
 
 # ---------- Checks that must reach the traveller ----------
-def _diet_alternative(ctx: Context, words: tuple[str, ...]) -> str:
+# Part of the day a meal belongs to. An alternative must be open in the same part: a breakfast cafe
+# is no answer to a dinner that needs checking (Travezy, 11 Nov).
+MEAL_BANDS = {"breakfast": (dt.time(6), dt.time(11)), "lunch": (dt.time(11), dt.time(16)),
+              "dinner": (dt.time(17), dt.time(23, 59))}
+
+
+def _meal_band(a) -> tuple[dt.time, dt.time]:
+    text = f"{a.name} {a.note}".lower()
+    named = next((b for b in ("dinner", "lunch", "breakfast") if b in text), None)
+    if named is None and a.kind != "eat":                # "BBQ" or "buffet" inside an evening activity
+        named = "dinner" if (a.end or a.start).hour >= 17 else "lunch"
+    if named is None:
+        named = "breakfast" if a.start.hour < 11 else "lunch" if a.start.hour < 16 else "dinner"
+    return MEAL_BANDS[named]
+
+
+def _diet_alternative(ctx: Context, words: tuple[str, ...], meals: list = ()) -> str:
     """A checked place that suits the diet, from today's candidates (blind review, 3 Nov:
     "ask the restaurant" alone isn't enough). Empty when no candidate fits."""
     for c in ctx.candidates:
         if in_plan(c.name, ctx):
+            continue
+        if meals and not any(_overlaps(c.window.start, c.window.end, *_meal_band(m)) for m in meals):
             continue
         text = f" {c.name} {' '.join(c.types)} {c.snippet} ".lower().replace("_", " ")
         if any(w in text for w in words):
@@ -281,23 +299,25 @@ def diet_checks(ctx: Context) -> list[str]:
     """Jain food rules are stricter than "vegetarian" or "plant-based": every meal needs asking."""
     r = set(ctx.preferences.diet.restrictions)
     if r & {"jain", "no_onion", "no_garlic", "no_root_vegetables"}:
-        meals = [a.name for a in _meals(ctx) if "jain" not in a.note.lower()]
+        acts = [a for a in _meals(ctx) if "jain" not in a.note.lower()]
+        meals = [a.name for a in acts]
         if not meals:
             return []
-        alt = _diet_alternative(ctx, ("jain",)) or _diet_alternative(ctx, ("vegetarian", "vegan", "pure veg"))
+        alt = _diet_alternative(ctx, ("jain",), acts) or _diet_alternative(ctx, ("vegetarian", "vegan", "pure veg"), acts)
         if alt and "jain" not in alt.lower():
             alt += ", a vegetarian place: ask for Jain preparation"
         return [f"Jain food: ask {' and '.join(meals)} for dishes without onion, garlic or root vegetables" + alt]
     if r & {"vegetarian", "vegan"}:
         # Every planned meal not already marked vegetarian gets a check (stand-in review: B04, B06, B11)
         word = "vegan" if "vegan" in r else "vegetarian"
-        meals = [a.name for a in _meals(ctx)
-                 if not any(w in f"{a.name} {a.note}".lower() for w in ("veg", "plant"))]
+        acts = [a for a in _meals(ctx)
+                if not any(w in f"{a.name} {a.note}".lower() for w in ("veg", "plant"))]
+        meals = [a.name for a in acts]
         if not meals:
             return []
         who = "for the vegetarians in your group" if ctx.preferences.diet.applies_to == "some" else "for you"
         return [f"{word.capitalize()} food: check {' and '.join(meals)} has {word} dishes {who}"
-                + _diet_alternative(ctx, ("vegan",) if word == "vegan" else ("vegetarian", "vegan", "veg ", "jain"))]
+                + _diet_alternative(ctx, ("vegan",) if word == "vegan" else ("vegetarian", "vegan", "veg ", "jain"), acts)]
     return []
 
 
