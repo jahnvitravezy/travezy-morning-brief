@@ -505,6 +505,11 @@ def _near_duplicate(a: str, b: str) -> bool:
     return bool(x and y) and len(x & y) / min(len(x), len(y)) >= 0.6
 
 
+def _same_moment(a: str, b: str) -> bool:
+    """Two lines about the same timed thing ("pickup at 15:00" twice: gpt-5-mini, td.08)."""
+    return bool(_hhmm(a) & _hhmm(b)) and bool(_words(a) & _words(b))
+
+
 def ensure_covered(heads_ups: list[str], ctx: Context, cap: int = MAX_HEADS_UPS) -> list[str]:
     """Code's must-say items first (the model's line when it covers one, else code's), then the model's
     other lines while there's room under the cap. Must-say lines are never dropped (scoring sheet,
@@ -534,12 +539,15 @@ def ensure_covered(heads_ups: list[str], ctx: Context, cap: int = MAX_HEADS_UPS)
             if "usual dinner" in line:                # code's dinner line replaces a model's vaguer one (B04, td.12)
                 model = [h for h in model if not ("dinner" in h.lower() and any(w in h.lower() for w in ("later", "usual", "late")))]
             kept.append(line)
+        if "usual dinner" in line:                    # and no second line saying the same ("You usually eat by 19:00...")
+            model = [h for h in model if not (any(w in h.lower() for w in ("dinner", "eat ", "table"))
+                                              and any(w in h.lower() for w in ("usual", "earlier")))]
         elif hit in model:
             model.remove(hit)
             kept.append(hit)
     extra: list[str] = []
     for h in model:
-        if not any(_near_duplicate(h, k) for k in kept + extra):
+        if not any(_near_duplicate(h, k) or _same_moment(h, k) for k in kept + extra):
             extra.append(h)
     return kept + extra[:max(0, cap - len(kept))]
 
@@ -558,7 +566,21 @@ def leave_by_line(ctx: Context, flag) -> str:
 # Claims about a place that no source we use can confirm (stand-in review, v6-v7: "rooftop dining",
 # "beach club" for a restaurant, "best views from the north side at sunset", "close to hotel").
 CLAIM_WORDS = ("rooftop", "beach club", "sunset", "best ", "secluded", "hidden", "thrilling", "stunning",
-               "must-see", "famous", "north side", "close to hotel", "close to your", "near your hotel")
+               "must-see", "famous", "north side", "close to hotel", "close to your", "near your hotel",
+               # details of a place nothing we fetch describes (gpt-5-mini, 11 Nov: "textured murals in the
+               # courtyard", "rest on nearby seating", "quiet courtyards", "rooftop dinner tonight")
+               "mural", "courtyard", "seating", "bench", "crowd", "morning light", "soft light", "softer light", "photograph", "lanes")
+
+
+def plan_text(ctx: Context) -> str:
+    """What the plan and the checked ideas themselves say: a claim word found here is supported."""
+    return " ".join([f"{a.name} {a.note}" for a in ctx.day.activities] + [c.name for c in ctx.candidates])
+
+
+def plan_body(ctx: Context) -> str:
+    """A notification body from the plan alone, for when the model's can't be sent."""
+    names = [a.name for a in ctx.day.activities if a.kind in ("do", "eat")][:3]
+    return fit_body("Today: " + _join(names)) if names else "Your plan for today"
 
 
 def unverified_claims(text: str, support: str = "") -> list[str]:
@@ -632,7 +654,7 @@ def tip_problems(tip: str, ctx: Context) -> list[str]:
             if (m := re.search(p, low))]
     out += [f"tip uses a time nothing gave it ({t})" for t in unknown_times(tip, ctx)]
     out += ["tip says a place has food for the diet, which nothing confirms"] if diet_claim(tip) else []
-    out += [f"tip makes a claim we can't verify ('{c.strip()}')" for c in unverified_claims(tip)]
+    out += [f"tip makes a claim we can't verify ('{c.strip()}')" for c in unverified_claims(tip, plan_text(ctx))]
     clash = {c.split(" ")[0].lower() for c in weather_clashes(ctx)}
     for a in ctx.day.activities:
         if any(c.startswith(f"{a.name} ") for c in weather_clashes(ctx)) and a.name.lower() in low:
@@ -688,7 +710,8 @@ def fix_idea_count(body: str, n: int) -> str:
     """The notification counts the ideas the brief really has. "plus 0 ideas for you" (B01, v7) was a
     model filling a template; the count is a fact, so code sets it."""
     import re
-    pat = re.compile(r"[,;]?\s*(?:and|plus|\+)\s+(?:\d+|one|two|three|no)\s+ideas?(?:\s+for\s+you)?", re.I)
+    # also "— plus 1 idea" and "+1 ideas" (gpt-5-mini, 11 Nov: bodies ended "—, plus 1 idea for you")
+    pat = re.compile(r"\s*[,;—–-]*\s*(?:and|plus|\+)\s*(?:\d+|one|two|three|no)\s+ideas?(?:\s+for\s+you)?", re.I)
     if not pat.search(body):
         return body
     repl = "" if n == 0 else f", plus {n} idea{'s' if n > 1 else ''} for you"

@@ -483,3 +483,24 @@ def test_judge_cannot_call_a_repeated_code_line_a_contradiction():
     brief.notification.body = "Rice terraces, then leave Monkey Forest by 16:00"
     ok, _ = confirm_serious(["The brief states 'leave Monkey Forest by 16:00', but it closes at 17:00."], brief, c)
     assert ok
+
+
+def test_idea_count_leaves_no_stray_dash():
+    from mb.agents.facts import fix_idea_count
+    assert fix_idea_count("Dubai Mall 10:00; Desert Safari 15:00 — plus 1 idea for you", 1) == "Dubai Mall 10:00; Desert Safari 15:00, plus 1 idea for you"
+    assert fix_idea_count("Rain 13:00-17:00, dinner tonight +1 ideas for you", 1) == "Rain 13:00-17:00, dinner tonight, plus 1 idea for you"
+    assert fix_idea_count("Dubai Mall, then the safari — plus 2 ideas for you", 0) == "Dubai Mall, then the safari"
+
+
+def test_details_nothing_confirms_are_claims_unless_the_plan_says_them():
+    from mb.agents.facts import unverified_claims
+    assert unverified_claims("Photograph textured murals in the courtyard mid-morning.")
+    assert unverified_claims("Book rooftop dinner for the evening.")
+    assert not unverified_claims("Bring a light layer for the evening.")
+    assert not unverified_claims("Dinner at the rooftop.", support="Level 43 Rooftop Lounge")
+
+
+def test_same_timed_thing_is_said_once():
+    from mb.agents.facts import _same_moment
+    assert _same_moment("Evening Desert Safari: pickup at 15:00.", "Pickup at 15:00 from your hotel — be ready early.")
+    assert not _same_moment("Evening Desert Safari: pickup at 15:00.", "Be at Burj Khalifa for 17:00.")
