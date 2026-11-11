@@ -142,3 +142,10 @@ async def test_fallback_does_not_carry_the_rejected_drafts_badge(ctx):
     assert b.meta.judge_verdict == "fallback"
     assert b.confidence.score is None and b.confidence.badge is None
     assert any(f.startswith("rejected draft scored") for f in b.confidence.flags)
+
+
+def test_tip_does_not_repeat_a_heads_up():
+    """gpt-5-mini, td.12 (11 Nov): the tip said "leave Monkey Forest by 17:00" again."""
+    from mb.agents.facts import _same_moment
+    assert _same_moment("Leave Sacred Monkey Forest by 17:00 to avoid closure and missed visit.",
+                        "Leave Sacred Monkey Forest Sanctuary by 17:00: it closes before your planned 17:30 finish.")

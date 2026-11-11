@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 
-from mb.agents.facts import (_covers, repeats_code_place, diet_claim, fit_body, plan_body, plan_text, unverified_claims, key_title, ensure_covered, fix_idea_count, safe_tip, spend, suggested_swap, timeline,
+from mb.agents.facts import (_covers, _near_duplicate, _same_moment, repeats_code_place, diet_claim, fit_body, plan_body, plan_text, unverified_claims, key_title, ensure_covered, fix_idea_count, safe_tip, spend, suggested_swap, timeline,
                              tip_problems, unknown_times,
                              weather_clashes, weather_summary)
 from mb.config import AgentSpec
@@ -66,9 +66,11 @@ def merge(ctx: Context, summary: Summary, surprises: Surprises | None,
     heads = [h for h in (text.heads_ups if text else s.heads_ups)
              if not _names_any(h, items) and not unknown_times(h, ctx) and not diet_claim(h)
              and not unverified_claims(h, support)]                           # nor a detail nothing confirms       # no time the model made up
+    heads = ensure_covered(heads, ctx)
     tip = next((t for t in ((text.local_tip if text else None), s.local_tip)
                 if t and not _names_any(t, items) and not (swap and _same_advice(t, swap))
-                and not tip_problems(t, ctx)), "") or safe_tip(ctx)            # never an invented place
+                and not tip_problems(t, ctx)                                   # never an invented place
+                and not any(_near_duplicate(t, h) or _same_moment(t, h) for h in heads)), "") or safe_tip(ctx)
     return MorningBrief(
         brief_id=brief_id(ctx), trip_id=ctx.trip_id, date=ctx.date,
         send_at_local=f"{ctx.send_at_local:%H:%M}" if ctx.send_at_local else "", send_at_utc=send_at_utc(ctx),
@@ -77,7 +79,7 @@ def merge(ctx: Context, summary: Summary, surprises: Surprises | None,
                                   body=fit_body(fix_idea_count(body, len(items)))),
         timeline=summary.timeline,
         weather=Weather(summary=weather_summary(ctx), clash=clashes[0] if clashes else None, suggested_swap=swap),
-        heads_ups=ensure_covered(heads, ctx),
+        heads_ups=heads,
         spend_estimate=_spend_text(summary.spend), surprises=items,
         local_tip=tip, actions=actions)
 

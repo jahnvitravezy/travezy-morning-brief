@@ -569,7 +569,7 @@ CLAIM_WORDS = ("rooftop", "beach club", "sunset", "best ", "secluded", "hidden",
                "must-see", "famous", "north side", "close to hotel", "close to your", "near your hotel",
                # details of a place nothing we fetch describes (gpt-5-mini, 11 Nov: "textured murals in the
                # courtyard", "rest on nearby seating", "quiet courtyards", "rooftop dinner tonight")
-               "mural", "courtyard", "seating", "bench", "crowd", "morning light", "soft light", "softer light", "photograph", "lanes")
+               "mural", "courtyard", "seating", "bench", "crowd", "queue", "peaceful", "quieter", "curfew", "morning light", "soft light", "softer light", "photograph", "lanes")
 
 
 def plan_text(ctx: Context) -> str:
